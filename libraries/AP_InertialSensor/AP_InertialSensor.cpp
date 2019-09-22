@@ -740,6 +740,11 @@ AP_InertialSensor::detect_backends(void)
     ADD_BACKEND(AP_InertialSensor_SITL::detect(*this));
 #elif HAL_INS_DEFAULT == HAL_INS_HIL
     ADD_BACKEND(AP_InertialSensor_HIL::detect(*this));
+#elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_PATRICK
+    ADD_BACKEND(AP_InertialSensor_LSM9DS1::probe(*this, hal.spi->get_device("lsm9ds1_ag"), ROTATION_NONE));
+    //#error PATRICK
+
+
 #elif AP_FEATURE_BOARD_DETECT
     switch (AP_BoardConfig::get_board_type()) {
     case AP_BoardConfig::PX4_BOARD_PX4V1:
