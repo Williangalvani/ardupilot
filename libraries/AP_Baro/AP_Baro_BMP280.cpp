@@ -34,6 +34,7 @@ extern const AP_HAL::HAL &hal;
 #define BMP280_FILTER_COEFFICIENT 2
 
 #define BMP280_ID            0x58
+#define BME280_ID            0x58
 
 #define BMP280_REG_CALIB     0x88
 #define BMP280_REG_ID        0xD0
@@ -64,6 +65,7 @@ AP_Baro_Backend *AP_Baro_BMP280::probe(AP_Baro &baro,
     return sensor;
 }
 
+#include <stdio.h>
 bool AP_Baro_BMP280::_init()
 {
     if (!_dev) {
@@ -77,7 +79,8 @@ bool AP_Baro_BMP280::_init()
 
     uint8_t whoami;
     if (!_dev->read_registers(BMP280_REG_ID, &whoami, 1)  ||
-        whoami != BMP280_ID) {
+        (whoami != BMP280_ID && whoami != BME280_ID)) {
+        printf("whoami != BMP280_ID %X %X | %d\n", whoami, BMP280_ID, _dev->bus_type());
         // not a BMP280
         return false;
     }

@@ -176,6 +176,34 @@
     #define HAL_OPTFLOW_PX4FLOW_I2C_BUS 2
     #define HAL_RANGEFINDER_LIGHTWARE_I2C_BUS 2
     #define HAL_WITH_UAVCAN 1
+
+    //PATRICK
+#elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_PATRICK
+    // ins
+    /*
+    #define HAL_INS_DEFAULT HAL_INS_MPU9250_I2C
+    #define HAL_INS_DEFAULT_ROTATION ROTATION_YAW_270
+    #define HAL_INS_MPU9250_I2C_BUS 1
+    #define HAL_INS_MPU9250_I2C_ADDR 0x68
+    #define HAL_INS_MPU9250_NAME "mpu9250"
+    */
+
+    #define HAL_BARO_PROBE_LIST PROBE_BARO_SPI(BMP280, "bmp280")
+
+    //compass
+    #define HAL_MAG_PROBE_LIST PROBE_MAG_SPI(LSM9DS1, "lsm9ds1_m",  ROTATION_PITCH_180)
+    //#define HAL_INS_PROBE_LIST PROBE_IMU_SPI(LSM9DS1, "lsm9ds1_g",  ROTATION_ROLL_180)
+
+    //pins not working
+    #define HAL_GPIO_A_LED_PIN   0
+    #define HAL_GPIO_B_LED_PIN   5
+    #define HAL_GPIO_C_LED_PIN   6
+    #define HAL_GPIO_LED_ON      HIGH
+    #define HAL_GPIO_LED_OFF     LOW
+    #define HAL_BATT_CURR_PIN    0
+    #define HAL_BATT_CURR_SCALE  1
+    #define HAL_BATT_VOLT_PIN    1
+    #define HAL_BATT_VOLT_SCALE  1
 #elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BLUE
     #define HAL_GPIO_A_LED_PIN 66
     #define HAL_GPIO_B_LED_PIN 67

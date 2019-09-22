@@ -899,6 +899,13 @@ void Compass::_detect_backends(void)
         break;
     }
 
+#elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_PATRICK
+    //ADD_BACKEND(DRIVER_LSM303D, AP_Compass_LSM303D::probe(hal.spi->get_device(HAL_INS_LSM9DS0_A_NAME), ROTATION_NONE));
+    /*
+    ADD_BACKEND(DRIVER_AK8963, AP_Compass_AK8963::probe_mpu9250(*this, hal.i2c_mgr->get_device(HAL_COMPASS_AK8963_I2C_BUS, HAL_COMPASS_AK8963_I2C_ADDR)),
+                AP_Compass_AK8963::name, false);
+    */
+    ADD_BACKEND(DRIVER_LSM303D, AP_Compass_LSM303D::probe(hal.spi->get_device("lsm9ds1_m"), ROTATION_NONE));
 #elif HAL_COMPASS_DEFAULT == HAL_COMPASS_NONE
     // no compass, or only external probe
 #else
