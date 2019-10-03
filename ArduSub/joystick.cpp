@@ -106,7 +106,8 @@ void Sub::transform_manual_control_to_rc_override(int16_t x, int16_t y, int16_t 
         RC_Channels::set_override(5, constrain_int16((y+yTrim)*rpyScale+rpyCenter,1100,1900), tnow); // lateral for ROV
     } else {
         // neutralize forward and lateral input while we are adjusting roll and pitch
-        RC_Channels::set_override(4, constrain_int16(xTrim*rpyScale+rpyCenter,1100,1900), tnow); // forward for ROV
+        RC_Channels::set_override(4, constrain_int16((z+zTrim)*throttleScale+throttleBase,1100,1900), tnow); // throttle as forward
+        RC_Channels::set_override(2, 1500, tnow); // center vertical controls
         RC_Channels::set_override(5, constrain_int16(yTrim*rpyScale+rpyCenter,1100,1900), tnow); // lateral for ROV
     }
 
