@@ -91,6 +91,9 @@
 #if OPTFLOW == ENABLED
 #include <AP_OpticalFlow/AP_OpticalFlow.h>     // Optical Flow library
 #endif
+#if VISUAL_ODOMETRY_ENABLED == ENABLED
+ # include <AP_VisualOdom/AP_VisualOdom.h>
+#endif
 
 #if RCMAP_ENABLED == ENABLED
 #include <AP_RCMapper/AP_RCMapper.h>        // RC input mapping library
@@ -210,6 +213,12 @@ private:
 #if OPTFLOW == ENABLED
     OpticalFlow optflow;
 #endif
+
+#if VISUAL_ODOMETRY_ENABLED == ENABLED
+    // Visual Odometry camera
+    AP_VisualOdom visual_odom;
+#endif
+
 
     // system time in milliseconds of last recorded yaw reset from ekf
     uint32_t ekfYawReset_ms = 0;
@@ -616,6 +625,7 @@ private:
 #if OPTFLOW == ENABLED
     void init_optflow();
 #endif
+    void init_visual_odom();
     void terrain_update();
     void terrain_logging();
     bool terrain_use();

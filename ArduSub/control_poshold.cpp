@@ -10,10 +10,10 @@
 bool Sub::poshold_init()
 {
     // fail to initialise PosHold mode if no GPS lock
-    if (!position_ok()) {
+    
+    if (!position_ok() && (!visual_odom.enabled() || !visual_odom.healthy())) {
         return false;
     }
-
     // initialize vertical speeds and acceleration
     pos_control.set_max_speed_z(-get_pilot_speed_dn(), g.pilot_speed_up);
     pos_control.set_max_accel_z(g.pilot_accel_z);

@@ -92,7 +92,7 @@ void Sub::init_ardupilot()
     init_rc_in();               // sets up rc channels from radio
     init_rc_out();              // sets up motors and output to escs
     init_joystick();            // joystick initialization
-
+    init_visual_odom();
     relay.init();
 
     /*
@@ -252,16 +252,17 @@ bool Sub::ekf_position_ok()
         return false;
     }
 
-    // with EKF use filter status and ekf check
-    nav_filter_status filt_status = inertial_nav.get_filter_status();
+    // get EKF filter status
+    nav_filter_status filt_status;
+    sub.ahrs.get_filter_status(filt_status);
 
     // if disarmed we accept a predicted horizontal position
-    if (!motors.armed()) {
+    if (!arming.is_armed()) {
         return ((filt_status.flags.horiz_pos_abs || filt_status.flags.pred_horiz_pos_abs));
+    } else {
+        // once armed we require a good absolute position and EKF must not be in const_pos_mode
+        return (filt_status.flags.horiz_pos_abs && !filt_status.flags.const_pos_mode);
     }
-
-    // once armed we require a good absolute position and EKF must not be in const_pos_mode
-    return (filt_status.flags.horiz_pos_abs && !filt_status.flags.const_pos_mode);
 }
 
 // optflow_position_ok - returns true if optical flow based position estimate is ok
