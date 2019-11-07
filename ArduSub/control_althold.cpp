@@ -21,8 +21,8 @@ bool Sub::althold_init()
     pos_control.set_alt_target(inertial_nav.get_altitude());
     pos_control.set_desired_velocity_z(inertial_nav.get_velocity_z());
 
-    last_roll = ahrs.roll_sensor;
-    last_pitch = ahrs.pitch_sensor;
+    last_roll = 0;
+    last_pitch = 0;
     last_yaw = ahrs.yaw_sensor;
     last_input_ms = AP_HAL::millis();
 
@@ -70,13 +70,17 @@ void Sub::handle_attitude()
         // If we don't have a mavlink attitude target, we use the pilot's input instead
         get_pilot_desired_lean_angles(channel_roll->get_control_in(), channel_pitch->get_control_in(), target_roll, target_pitch, attitude_control.get_althold_lean_angle_max());
         target_yaw = get_pilot_desired_yaw_rate(channel_yaw->get_control_in());
-        if (abs(target_roll) > 50 || abs(target_pitch) > 50 || abs(target_yaw) > 50) {
+        if (abs(target_roll) > 50 || abs(target_pitch) > 50) {
             last_roll = ahrs.roll_sensor;
             last_pitch = ahrs.pitch_sensor;
             last_yaw = ahrs.yaw_sensor;
             last_input_ms = tnow;
             attitude_control.input_rate_bf_roll_pitch_yaw(target_roll, target_pitch, target_yaw);
-        } else if (tnow < last_input_ms + 250) {
+        } else if (abs(target_yaw) > 50) {
+            attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw(target_roll, target_pitch, target_yaw);
+            last_yaw = ahrs.yaw_sensor;
+            last_input_ms = tnow;
+        }else if (tnow < last_input_ms + 250) {
             // just brake for a few mooments so we don't bounce
             attitude_control.input_rate_bf_roll_pitch_yaw(0, 0, 0);
         } else {
