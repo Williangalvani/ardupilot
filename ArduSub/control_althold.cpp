@@ -77,11 +77,12 @@ void Sub::handle_attitude()
             last_input_ms = tnow;
             attitude_control.input_rate_bf_roll_pitch_yaw(target_roll, target_pitch, target_yaw);
         } else if (abs(target_yaw) > 50) {
-            attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw(target_roll, target_pitch, target_yaw);
+            attitude_control.input_rate_bf_roll_pitch_yaw(0, 0, target_yaw);
             last_yaw = ahrs.yaw_sensor;
             last_input_ms = tnow;
         }else if (tnow < last_input_ms + 250) {
             // just brake for a few mooments so we don't bounce
+            last_yaw = ahrs.yaw_sensor;
             attitude_control.input_rate_bf_roll_pitch_yaw(0, 0, 0);
         } else {
             // Lock attitude
