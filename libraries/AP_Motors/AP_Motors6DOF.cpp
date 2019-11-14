@@ -20,6 +20,7 @@
 #include <AP_BattMonitor/AP_BattMonitor.h>
 #include <AP_HAL/AP_HAL.h>
 #include "AP_Motors6DOF.h"
+#include <stdio.h>
 
 extern const AP_HAL::HAL& hal;
 
@@ -359,6 +360,23 @@ void AP_Motors6DOF::output_armed_stabilizing()
         return;
     }
 
+
+    static float _max_motor_current = 22; //max current in A
+
+    float _expected_current = 0.6;
+    for (uint8_t i = 0; i < AP_MOTORS_MAX_NUM_MOTORS; i++) {
+        if (motor_enabled[i]) {
+            _expected_current += _thrust_rpyt_out[i] * _thrust_rpyt_out[i] * _max_motor_current;
+        }
+    }
+
+    if (_batt_current > 0.5*_batt_current_max) { // if we are getting close to the limit
+        // update estimative
+        float estimateError = _batt_current - _expected_current;
+        _max_motor_current += 0.001 * estimateError;
+    }
+    printf("max_current:\t%f read:\t%f \texpected:\t%f\n", _max_motor_current, _batt_current, _expected_current);
+    
     float _batt_current_delta = _batt_current - _batt_current_last;
 
     float loop_interval = 1.0f/_loop_rate;
