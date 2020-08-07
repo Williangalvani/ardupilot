@@ -1,6 +1,11 @@
 APM:Sub Release Notes:
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Sub 4.1.0beta 7-Aug-2020
+ - Improved Position Hold Behavior
+ - Added support for visual odometry messages.
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Sub 4.0.0 4-March-2020
 
 - Over 10000 new commits, catching up with other vehicles 4.0 releases
