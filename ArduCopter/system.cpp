@@ -44,6 +44,7 @@ void Copter::init_ardupilot()
     notify.init();
     notify_flight_mode();
 
+    hal.console->printf("init battery\n");
     // initialise battery monitor
     battery.init();
 

@@ -20,7 +20,7 @@
 #include <RC_Channel/RC_Channel.h>
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 #include <AP_Logger/AP_Logger.h>
-
+#include <stdio.h>
 AP_RCProtocol_Backend::AP_RCProtocol_Backend(AP_RCProtocol &_frontend) :
     frontend(_frontend),
     rc_input_count(0),
@@ -71,6 +71,7 @@ void AP_RCProtocol_Backend::add_input(uint8_t num_values, uint16_t *values, bool
 #endif
     if (!in_failsafe) {
         rc_input_count++;
+        printf("rc input ct %d", rc_input_count);
     }
     rssi = _rssi;
 }

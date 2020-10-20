@@ -75,8 +75,8 @@ void AP_RCProtocol_IBUS::process_pulse(uint32_t w0, uint32_t w1)
 // support byte input
 void AP_RCProtocol_IBUS::_process_byte(uint32_t timestamp_us, uint8_t b)
 {
-    ::printf("%d\n", timestamp_us);
-    const bool have_frame_gap = (timestamp_us - byte_input.last_byte_us >= 500U);
+    // printf("%d %x\n", timestamp_us, b);
+    const bool have_frame_gap = (timestamp_us - byte_input.last_byte_us >= 2000U);
     byte_input.last_byte_us = timestamp_us;
 
     if (have_frame_gap)
@@ -105,6 +105,7 @@ void AP_RCProtocol_IBUS::_process_byte(uint32_t timestamp_us, uint8_t b)
         log_data(AP_RCProtocol::IBUS, timestamp_us, byte_input.buf, byte_input.ofs);
         if (ibus_decode(byte_input.buf, values, &ibus_failsafe))
         {
+            printf("good! %d %d\n", values[0], ibus_failsafe);
             add_input(IBUS_INPUT_CHANNELS, values, ibus_failsafe);
         }
         byte_input.ofs = 0;
@@ -118,5 +119,7 @@ void AP_RCProtocol_IBUS::process_byte(uint8_t b, uint32_t baudrate)
     {
         return;
     }
+
+    // _process_byte(AP_HAL::native_micros(), b);
     _process_byte(AP_HAL::micros(), b);
 }

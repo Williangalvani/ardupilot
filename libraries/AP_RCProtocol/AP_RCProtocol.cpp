@@ -31,11 +31,17 @@
 #include "AP_RCProtocol_FPort.h"
 #include <AP_Math/AP_Math.h>
 #include <RC_Channel/RC_Channel.h>
-
+#include <stdio.h>
 extern const AP_HAL::HAL &hal;
+AP_RCProtocol::AP_RCProtocol()
+{
+    hal.console->printf("rcprotocol\n");
+}
 
 void AP_RCProtocol::init()
 {
+    hal.console->printf("rcprotocol\n");
+
     backend[AP_RCProtocol::PPM] = new AP_RCProtocol_PPMSum(*this);
     backend[AP_RCProtocol::IBUS] = new AP_RCProtocol_IBUS(*this);
     backend[AP_RCProtocol::SBUS] = new AP_RCProtocol_SBUS(*this, true);
@@ -87,8 +93,10 @@ void AP_RCProtocol::process_pulse(uint32_t width_s0, uint32_t width_s1)
     if (_detected_protocol != AP_RCProtocol::NONE && !searching)
     {
         backend[_detected_protocol]->process_pulse(width_s0, width_s1);
+        printf("checking detected protocol\n");
         if (backend[_detected_protocol]->new_input())
         {
+            printf("new input on detected!\n");
             _new_input = true;
             _last_input_ms = now;
         }
@@ -119,6 +127,7 @@ void AP_RCProtocol::process_pulse(uint32_t width_s0, uint32_t width_s1)
                 {
                     continue;
                 }
+                printf("new input on search!\n");
                 _new_input = (input_count != backend[i]->get_rc_input_count());
                 _detected_protocol = (enum AP_RCProtocol::rcprotocol_t)i;
                 for (uint8_t j = 0; j < AP_RCProtocol::NONE; j++)
@@ -186,8 +195,10 @@ bool AP_RCProtocol::process_byte(uint8_t byte, uint32_t baudrate)
     if (_detected_protocol != AP_RCProtocol::NONE && !searching)
     {
         backend[_detected_protocol]->process_byte(byte, baudrate);
+        //printf("checking detected protocol\n");
         if (backend[_detected_protocol]->new_input())
         {
+            printf("new input on detected!\n");
             _new_input = true;
             _last_input_ms = now;
         }
@@ -213,6 +224,7 @@ bool AP_RCProtocol::process_byte(uint8_t byte, uint32_t baudrate)
                 {
                     continue;
                 }
+                printf("new input on search!\n");
                 _new_input = (input_count != backend[i]->get_rc_input_count());
                 _detected_protocol = (enum AP_RCProtocol::rcprotocol_t)i;
                 _last_input_ms = now;
@@ -239,6 +251,8 @@ bool AP_RCProtocol::process_byte(uint8_t byte, uint32_t baudrate)
  */
 void AP_RCProtocol::check_added_uart(void)
 {
+    hal.console->printf("checking added uart\n");
+
     if (!added.uart)
     {
         return;
@@ -285,7 +299,7 @@ void AP_RCProtocol::check_added_uart(void)
             break;
         }
         added.uart->begin(added.baudrate, 128, 128);
-        added.uart->discard_input();
+        // added.uart->discard_input();
         added.last_baud_change_ms = AP_HAL::millis();
     }
     uint32_t n = added.uart->available();
@@ -298,7 +312,7 @@ void AP_RCProtocol::check_added_uart(void)
             process_byte(uint8_t(b), added.baudrate);
         }
     }
-    added.uart->discard_input();
+    // added.uart->discard_input();
 
     if (!_detected_with_bytes)
     {
@@ -325,7 +339,7 @@ bool AP_RCProtocol::new_input()
 {
     bool ret = _new_input;
     _new_input = false;
-
+    printf("new input %d", ret);
     // if we have an extra UART from a SERIALn_PROTOCOL then check it for data
     check_added_uart();
 

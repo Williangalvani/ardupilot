@@ -27,7 +27,8 @@
 #include <GCS_MAVLink/GCS.h>
 
 #if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_DISCO || \
-    CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BLUE
+    CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BLUE || \
+    CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_NAVIGATOR
 
 extern const AP_HAL::HAL& hal;
 
@@ -153,6 +154,7 @@ void RCInput_RCProtocol::_timer_tick(void)
         for (uint8_t i=0; i<n; i++) {
             _pwm_values[i] = AP::RC().read(i);
         }
+        printf("pwm %d %d\n", _pwm_values[0], n);
         _num_channels = n;
         rc_input_count++;
     }

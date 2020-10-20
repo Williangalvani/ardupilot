@@ -58,6 +58,7 @@ uint16_t RCInput::read(uint8_t ch)
     if (ch >= _num_channels) {
         return 0;
     }
+    printf("read channel %d %d\n", ch, _pwm_values[ch]);
     return _pwm_values[ch];
 }
 

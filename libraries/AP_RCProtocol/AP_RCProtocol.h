@@ -25,7 +25,7 @@ class AP_RCProtocol_Backend;
 
 class AP_RCProtocol {
 public:
-    AP_RCProtocol() {}
+    AP_RCProtocol();
     ~AP_RCProtocol();
     friend class AP_RCProtocol_Backend;
 
