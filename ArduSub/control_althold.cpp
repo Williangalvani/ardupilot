@@ -66,6 +66,7 @@ void Sub::althold_run()
         target_yaw = degrees(target_yaw);
 
         attitude_control.input_euler_angle_roll_pitch_yaw(target_roll * 1e2f, target_pitch * 1e2f, target_yaw * 1e2f, true);
+        pos_control.update_z_controller();
         return;
     }
 
