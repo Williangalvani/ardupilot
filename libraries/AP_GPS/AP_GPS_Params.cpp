@@ -44,7 +44,7 @@ const AP_Param::GroupInfo AP_GPS::Params::var_info[] = {
     // @Values: 100:10Hz,125:8Hz,200:5Hz
     // @Range: 50 200
     // @User: Advanced
-    AP_GROUPINFO("RATE_MS", 3, AP_GPS::Params, rate_ms, 200),
+    AP_GROUPINFO("RATE_MS", 3, AP_GPS::Params, rate_ms, 1000),
 
     // @Param: POS_X
     // @DisplayName: Antenna X position offset

@@ -1192,12 +1192,12 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
             "EK3_SRC1_VELZ": 0,
 
             "VISO_TYPE": 1,
-            #"VISO_VEL_M_NSE": 0.000001,
+            "VISO_VEL_M_NSE": 0.0000001,
             "SERIAL5_PROTOCOL": 1,
-            "SIM_VICON_TMASK": 8,  # send VISION_POSITION_DELTA
-            # "SIM_VICON_TMASK": 2,  # send VISION_SPEED_ESTIMATE
+            #"SIM_VICON_TMASK": 8,  # send VISION_POSITION_DELTA
+            "SIM_VICON_TMASK": 2,  # send VISION_SPEED_ESTIMATE
             # "SIM_VICON_TMASK": 10,  # send VISION_SPEED_ESTIMATE AND VISION_POSITION_DELTA
-            #"EK3_VELNE_M_NSE": 0.001,
+            "EK3_VELNE_M_NSE": 0.000001,
 
             "GPS1_TYPE": 1,
             "SIM_GPS1_TYPE": 0,
@@ -1205,11 +1205,12 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
 
             "GPS2_TYPE": 1,
             "SIM_GPS2_DRFTALT": 3,
-            "SIM_GPS2_ACC": 0.3,
+            "SIM_GPS2_ACC": 1.0,
             "SIM_GPS2_ENABLE": 1,
             "SIM_GPS2_TYPE": 1,
+            "SIM_GPS2_HZ": 1,
 
-            "EK3_POSNE_M_NSE": 100,
+            "EK3_POSNE_M_NSE": 1000000,
 
         })
         self.disarm_vehicle()

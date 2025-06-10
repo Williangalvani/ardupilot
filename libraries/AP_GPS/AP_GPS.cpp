@@ -68,7 +68,7 @@
 
 #define GPS_RTK_INJECT_TO_ALL 127
 #ifndef GPS_MAX_RATE_MS
-#define GPS_MAX_RATE_MS 200 // maximum value of rate_ms (i.e. slowest update rate) is 5hz or 200ms
+#define GPS_MAX_RATE_MS 2000 // maximum value of rate_ms (i.e. slowest update rate) is 5hz or 200ms
 #endif
 #define GPS_BAUD_TIME_MS 1200
 #define GPS_TIMEOUT_MS 4000u
@@ -958,7 +958,7 @@ void AP_GPS::update_instance(uint8_t instance)
 
     if (data_should_be_logged) {
         // keep count of delayed frames and average frame delay for health reporting
-        const uint16_t gps_max_delta_ms = 245; // 200 ms (5Hz) + 45 ms buffer
+        const uint16_t gps_max_delta_ms = 2450; // 200 ms (5Hz) + 45 ms buffer
         GPS_timing &t = timing[instance];
 
         if (t.delta_time_ms > gps_max_delta_ms) {
@@ -966,7 +966,7 @@ void AP_GPS::update_instance(uint8_t instance)
         } else {
             t.delayed_count = 0;
         }
-        if (t.delta_time_ms < 2000) {
+        if (t.delta_time_ms < 10000) {
             if (t.average_delta_ms <= 0) {
                 t.average_delta_ms = t.delta_time_ms;
             } else {
@@ -1789,7 +1789,7 @@ bool AP_GPS::is_healthy(uint8_t instance) const
       fact that the rate of yaw data is not critical
      */
     const uint8_t delay_threshold = 2;
-    const float delay_avg_max = is_rtk_rover(instance) ? 333 : 215;
+    const float delay_avg_max = 2000; //is_rtk_rover(instance) ? 333 : 215;
     const GPS_timing &t = timing[instance];
     bool delay_ok = (t.delayed_count < delay_threshold) &&
         t.average_delta_ms < delay_avg_max &&
