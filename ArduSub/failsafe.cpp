@@ -152,6 +152,7 @@ void Sub::failsafe_ekf_check()
 // Battery failsafe handler
 void Sub::handle_battery_failsafe(const char* type_str, const int8_t action)
 {
+    uint32_t tnow = AP_HAL::millis();
     LOGGER_WRITE_ERROR(LogErrorSubsystem::FAILSAFE_BATT, LogErrorCode::FAILSAFE_OCCURRED);
 
     switch((Failsafe_Action)action) {
@@ -162,6 +163,13 @@ void Sub::handle_battery_failsafe(const char* type_str, const int8_t action)
             arming.disarm(AP_Arming::Method::BATTERYFAILSAFE);
             break;
         case Failsafe_Action_Warn:
+        {
+            // Always send a warning every 20 seconds
+            if (tnow > failsafe.last_leak_warn_ms + 20000) {
+                failsafe.last_leak_warn_ms = tnow;
+                gcs().send_text(MAV_SEVERITY_WARNING, "Battery low");
+            }
+        }
         case Failsafe_Action_None:
             break;
     }
