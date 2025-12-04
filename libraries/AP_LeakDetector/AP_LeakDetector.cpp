@@ -144,3 +144,4 @@ void AP_LeakDetector::set_detect()
 {
     _last_detect_ms = AP_HAL::millis();
 }
+
