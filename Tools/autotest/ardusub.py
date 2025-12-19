@@ -1311,7 +1311,7 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
             "SIM_GPS1_ACC": 0.3,
             "SIM_GPS1_ENABLE": 1,
             "SIM_GPS1_TYPE": 1,
-            "SIM_GPS1_NSE": 0.3,
+            "SIM_GPS1_HNSE": 0.3,
 
             "GPS2_TYPE": 0,
 
@@ -1323,7 +1323,7 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
         self.wait_ready_to_arm()
         self.arm_vehicle()
         self.change_mode('POSHOLD')
-        self.set_parameter("SIM_GPS1_NSE", 1.5)
+        self.set_parameter("SIM_GPS1_HNSE", 1.5)
         self.watch_position_maintained(delta=1.0, timeout=60.0)
         # dive down to 10m
         self.set_rc(Joystick.Throttle, 1300)

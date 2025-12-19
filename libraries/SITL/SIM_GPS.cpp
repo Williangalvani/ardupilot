@@ -155,10 +155,15 @@ const AP_Param::GroupInfo SIM::GPSParms::var_info[] = {
 
     AP_GROUPINFO("OPTIONS",  18, GPSParms, options, 0),
     // @Param: NSE
-    // @DisplayName: GPS Noise radius
+    // @DisplayName: GPS Horizontal Noise radius
     // @Description: Noise radius in meters, the farthest the reading can be from the true position
     // @User: Advanced
-    AP_GROUPINFO("NSE",       18, GPSParms, noise_radius, 0),
+    AP_GROUPINFO("HNSE",       19, GPSParms, noise_radius_horizontal, 0),
+    // @Param: VNSE
+    // @DisplayName: GPS Vertical Noise radius
+    // @Description: Vertical noise radius in meters, the farthest the reading can be from the true position
+    // @User: Advanced
+    AP_GROUPINFO("VNSE",       20, GPSParms, noise_radius_vertical, 0),
 
     AP_GROUPEND
 };
@@ -564,9 +569,9 @@ void GPS::update()
     Vector3f glitch_offsets = params.glitch;
     // 1 meter at the equator is 1.113195e-5 degrees
     // TODO: scale longitude noise with latitude
-    d.latitude += glitch_offsets.x +  params.noise_radius * sinf(now_ms * 0.0005f) * 1.113195e-5;
-    d.longitude += glitch_offsets.y + params.noise_radius * cosf(now_ms * 0.0005f) * 1.113195e-5;
-    d.altitude += glitch_offsets.z;
+    d.latitude += glitch_offsets.x +  params.noise_radius_horizontal * sinf(now_ms * 0.0005f) * 1.113195e-5;
+    d.longitude += glitch_offsets.y + params.noise_radius_horizontal * cosf(now_ms * 0.0005f) * 1.113195e-5;
+    d.altitude += glitch_offsets.z + params.noise_radius_vertical * sinf(now_ms * 0.0010f);
 
     if (params.jam == 1) {
         simulate_jamming(d);
