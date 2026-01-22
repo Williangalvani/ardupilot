@@ -163,6 +163,9 @@ void AP_Mount_Backend::adjust_mnt_target_if_RP_locked()
         ahrs_angle_rad.rotate(yaw_bf_rad);
     }
     
+    if (mnt_target.target_type == MountTargetType::RATE){
+        return;
+    }
     // remove roll and pitch lean angle to correct to body frame
     if (!mnt_target.angle_rad.roll_is_ef){
         mnt_target.angle_rad.roll += ahrs_angle_rad.x;
