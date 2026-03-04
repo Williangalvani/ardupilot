@@ -461,8 +461,8 @@ void ModeGuided::run()
 void ModeGuided::guided_pos_control_run()
 {
     // if motors not enabled set throttle to zero and exit immediately
-    if (!motors.armed()) {
-        motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
+    if (!motors->armed()) {
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
         // Sub vehicles do not stabilize roll/pitch/yaw when disarmed
         attitude_control->set_throttle_out(NEUTRAL_THROTTLE,true,g.throttle_filt);
         attitude_control->relax_attitude_controllers();
@@ -487,7 +487,7 @@ void ModeGuided::guided_pos_control_run()
     }
 
     // set motors to full range
-    motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+    motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
     // run waypoint controller
     sub.failsafe_terrain_set_status(sub.wp_nav.update_wpnav());
@@ -496,8 +496,8 @@ void ModeGuided::guided_pos_control_run()
     sub.translate_wpnav_rp(lateral_out, forward_out);
 
     // Send to forward/lateral outputs
-    motors.set_lateral(lateral_out);
-    motors.set_forward(forward_out);
+    motors->set_lateral(lateral_out);
+    motors->set_forward(forward_out);
 
     // WP_Nav has set the vertical position control targets
     // run the vertical position controller and set output throttle
@@ -526,8 +526,8 @@ void ModeGuided::guided_pos_control_run()
 void ModeGuided::guided_vel_control_run()
 {
     // ifmotors not enabled set throttle to zero and exit immediately
-    if (!motors.armed()) {
-        motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
+    if (!motors->armed()) {
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
         // Sub vehicles do not stabilize roll/pitch/yaw when disarmed
         attitude_control->set_throttle_out(NEUTRAL_THROTTLE,true,g.throttle_filt);
         attitude_control->relax_attitude_controllers();
@@ -554,7 +554,7 @@ void ModeGuided::guided_vel_control_run()
     }
 
     // set motors to full range
-    motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+    motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
     // set velocity to zero if no updates received for 3 seconds
     uint32_t tnow = AP_HAL::millis();
@@ -573,8 +573,8 @@ void ModeGuided::guided_vel_control_run()
     sub.translate_pos_control_rp(lateral_out, forward_out);
 
     // Send to forward/lateral outputs
-    motors.set_lateral(lateral_out);
-    motors.set_forward(forward_out);
+    motors->set_lateral(lateral_out);
+    motors->set_forward(forward_out);
 
     // call attitude controller
     if (sub.auto_yaw_mode == AUTO_YAW_HOLD) {
@@ -599,8 +599,8 @@ void ModeGuided::guided_vel_control_run()
 void ModeGuided::guided_posvel_control_run()
 {
     // if motors not enabled set throttle to zero and exit immediately
-    if (!motors.armed()) {
-        motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
+    if (!motors->armed()) {
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
         // Sub vehicles do not stabilize roll/pitch/yaw when disarmed
         attitude_control->set_throttle_out(NEUTRAL_THROTTLE,true,g.throttle_filt);
         attitude_control->relax_attitude_controllers();
@@ -628,7 +628,7 @@ void ModeGuided::guided_posvel_control_run()
     }
 
     // set motors to full range
-    motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+    motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
     // set velocity to zero if no updates received for 3 seconds
     uint32_t tnow = AP_HAL::millis();
@@ -653,8 +653,8 @@ void ModeGuided::guided_posvel_control_run()
     sub.translate_pos_control_rp(lateral_out, forward_out);
 
     // Send to forward/lateral outputs
-    motors.set_lateral(lateral_out);
-    motors.set_forward(forward_out);
+    motors->set_lateral(lateral_out);
+    motors->set_forward(forward_out);
 
     // call attitude controller
     if (sub.auto_yaw_mode == AUTO_YAW_HOLD) {
@@ -679,8 +679,8 @@ void ModeGuided::guided_posvel_control_run()
 void ModeGuided::guided_angle_control_run()
 {
     // if motors not enabled set throttle to zero and exit immediately
-    if (!motors.armed()) {
-        motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
+    if (!motors->armed()) {
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
         // Sub vehicles do not stabilize roll/pitch/yaw when disarmed
         attitude_control->set_throttle_out(NEUTRAL_THROTTLE,true,g.throttle_filt);
         attitude_control->relax_attitude_controllers();
@@ -715,7 +715,7 @@ void ModeGuided::guided_angle_control_run()
     }
 
     // set motors to full range
-    motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+    motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
     // call attitude controller
     attitude_control->input_euler_angle_roll_pitch_yaw_cd(roll_in, pitch_in, yaw_in, true);

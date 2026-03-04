@@ -42,9 +42,9 @@ void ModeCircle::run()
     sub.circle_nav.check_param_change();
 
     // if not armed set throttle to zero and exit immediately
-    if (!motors.armed()) {
+    if (!motors->armed()) {
         // To-Do: add some initialisation of position controllers
-        motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
         // Sub vehicles do not stabilize roll/pitch/yaw when disarmed
         attitude_control->set_throttle_out(NEUTRAL_THROTTLE,true,g.throttle_filt);
         attitude_control->relax_attitude_controllers();
@@ -63,7 +63,7 @@ void ModeCircle::run()
     target_climb_rate = sub.get_pilot_desired_climb_rate(channel_throttle->get_control_in());
 
     // set motors to full range
-    motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+    motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
     // run circle controller
     sub.failsafe_terrain_set_status(sub.circle_nav.update_cms());
@@ -75,8 +75,8 @@ void ModeCircle::run()
     sub.translate_circle_nav_rp(lateral_out, forward_out);
 
     // Send to forward/lateral outputs
-    motors.set_lateral(lateral_out);
-    motors.set_forward(forward_out);
+    motors->set_lateral(lateral_out);
+    motors->set_forward(forward_out);
 
     // call attitude controller
     if (sub.circle_pilot_yaw_override) {

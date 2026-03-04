@@ -50,10 +50,10 @@ void Sub::init_rc_in()
 // init_rc_out -- initialise motors and check if pilot wants to perform ESC calibration
 void Sub::init_rc_out()
 {
-    motors.set_update_rate(g.rc_speed);
-    motors.init((AP_Motors::motor_frame_class)g.frame_configuration.get(), AP_Motors::motor_frame_type::MOTOR_FRAME_TYPE_PLUS);
-    motors.convert_pwm_min_max_param(channel_throttle->get_radio_min(), channel_throttle->get_radio_max());
-    motors.update_throttle_range();
+    motors->set_update_rate(g.rc_speed);
+    motors->init((AP_Motors::motor_frame_class)g.frame_configuration.get(), AP_Motors::motor_frame_type::MOTOR_FRAME_TYPE_PLUS);
+    motors->convert_pwm_min_max_param(channel_throttle->get_radio_min(), channel_throttle->get_radio_max());
+    motors->update_throttle_range();
 
     // enable output to motors
     if (arming.rc_calibration_checks(true)) {
@@ -92,7 +92,7 @@ void Sub::read_radio()
         // throttle failsafe not enabled
         return;
     }
-    if (!rc().has_ever_seen_rc_input() && !sub.motors.armed()) {
+    if (!rc().has_ever_seen_rc_input() && !motors->armed()) {
         // we only failsafe if we are armed OR we have ever seen an RC receiver
         return;
     }
@@ -115,7 +115,7 @@ void Sub::set_throttle_and_failsafe(uint16_t throttle_pwm)
     if (throttle_pwm < (uint16_t)g.failsafe_throttle_value) {
 
         // if we are already in failsafe or motors not armed pass through throttle and exit
-        if (failsafe.radio || !(rc().has_ever_seen_rc_input() || sub.motors.armed())) {
+        if (failsafe.radio || !(rc().has_ever_seen_rc_input() || motors->armed())) {
             return;
         }
 

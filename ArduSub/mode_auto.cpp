@@ -105,12 +105,12 @@ void ModeAuto::auto_wp_start(const Location& dest_loc)
 void ModeAuto::auto_wp_run()
 {
     // if not armed set throttle to zero and exit immediately
-    if (!motors.armed()) {
+    if (!motors->armed()) {
         // To-Do: reset waypoint origin to current location because vehicle is probably on the ground so we don't want it lurching left or right on take-off
         //    (of course it would be better if people just used take-off)
         // call attitude controller
         // Sub vehicles do not stabilize roll/pitch/yaw when disarmed
-        motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
         attitude_control->set_throttle_out(NEUTRAL_THROTTLE,true,g.throttle_filt);
         attitude_control->relax_attitude_controllers();
         sub.wp_nav.wp_and_spline_init_m();                                                // Reset xy target
@@ -128,7 +128,7 @@ void ModeAuto::auto_wp_run()
     }
 
     // set motors to full range
-    motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+    motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
     // run waypoint controller
     // TODO logic for terrain tracking target going below fence limit
@@ -143,8 +143,8 @@ void ModeAuto::auto_wp_run()
     sub.translate_wpnav_rp(lateral_out, forward_out);
 
     // Send to forward/lateral outputs
-    motors.set_lateral(lateral_out);
-    motors.set_forward(forward_out);
+    motors->set_lateral(lateral_out);
+    motors->set_forward(forward_out);
 
     // WP_Nav has set the vertical position control targets
     // run the vertical position controller and set output throttle
@@ -241,8 +241,8 @@ void ModeAuto::auto_circle_run()
     sub.translate_circle_nav_rp(lateral_out, forward_out);
 
     // Send to forward/lateral outputs
-    motors.set_lateral(lateral_out);
-    motors.set_forward(forward_out);
+    motors->set_lateral(lateral_out);
+    motors->set_forward(forward_out);
 
     // WP_Nav has set the vertical position control targets
     // run the vertical position controller and set output throttle
@@ -299,8 +299,8 @@ bool ModeAuto::auto_loiter_start()
 void ModeAuto::auto_loiter_run()
 {
     // if not armed set throttle to zero and exit immediately
-    if (!motors.armed()) {
-        motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
+    if (!motors->armed()) {
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
         // Sub vehicles do not stabilize roll/pitch/yaw when disarmed
         attitude_control->set_throttle_out(NEUTRAL_THROTTLE,true,g.throttle_filt);
         attitude_control->relax_attitude_controllers();
@@ -316,7 +316,7 @@ void ModeAuto::auto_loiter_run()
     }
 
     // set motors to full range
-    motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+    motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
     // run waypoint and z-axis position controller
     sub.failsafe_terrain_set_status(sub.wp_nav.update_wpnav());
@@ -327,8 +327,8 @@ void ModeAuto::auto_loiter_run()
     sub.translate_wpnav_rp(lateral_out, forward_out);
 
     // Send to forward/lateral outputs
-    motors.set_lateral(lateral_out);
-    motors.set_forward(forward_out);
+    motors->set_lateral(lateral_out);
+    motors->set_forward(forward_out);
 
     // WP_Nav has set the vertical position control targets
     // run the vertical position controller and set output throttle
@@ -455,7 +455,7 @@ bool ModeAuto::auto_terrain_recover_start()
     sub.loiter_nav.init_target();
 
     // Reset z axis controller
-    position_control->D_relax_controller(motors.get_throttle_hover());
+    position_control->D_relax_controller(motors->get_throttle_hover());
 
     // initialize vertical maximum speeds and acceleration
     // All limits must be positive
@@ -477,13 +477,13 @@ void ModeAuto::auto_terrain_recover_run()
     float target_climb_rate = 0;
 
     // if not armed set throttle to zero and exit immediately
-    if (!motors.armed()) {
-        motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
+    if (!motors->armed()) {
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
         attitude_control->set_throttle_out(NEUTRAL_THROTTLE,true,g.throttle_filt);
         attitude_control->relax_attitude_controllers();
 
-        sub.loiter_nav.init_target();                                       // Reset xy target
-        position_control->D_relax_controller(motors.get_throttle_hover());  // Reset z axis controller
+        sub.loiter_nav.init_target();                                                   // Reset xy target
+        position_control->D_relax_controller(motors->get_throttle_hover());                // Reset z axis controller
         return;
     }
 
@@ -510,7 +510,7 @@ void ModeAuto::auto_terrain_recover_run()
             // Start timer as soon as rangefinder is healthy
             if (rangefinder_recovery_ms == 0) {
                 rangefinder_recovery_ms = AP_HAL::millis();
-                position_control->D_relax_controller(motors.get_throttle_hover()); // Reset alt hold targets
+                position_control->D_relax_controller(motors->get_throttle_hover()); // Reset alt hold targets
             }
 
             // 1.5 seconds of healthy rangefinder means we can resume mission with terrain enabled
@@ -556,8 +556,8 @@ void ModeAuto::auto_terrain_recover_run()
     sub.translate_wpnav_rp(lateral_out, forward_out);
 
     // Send to forward/lateral outputs
-    motors.set_lateral(lateral_out);
-    motors.set_forward(forward_out);
+    motors->set_lateral(lateral_out);
+    motors->set_forward(forward_out);
 
     /////////////////////
     // update z target //

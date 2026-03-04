@@ -52,7 +52,7 @@ void ModeSurftrak::run()
 {
     run_pre();
 
-    if (!motors.armed()) {
+    if (!motors->armed()) {
         // Forget rangefinder target
         reset();
     } else {

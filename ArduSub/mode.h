@@ -98,7 +98,7 @@ protected:
     ParametersG2 &g2;
     AP_InertialNav &inertial_nav;
     AP_AHRS &ahrs;
-    AP_Motors6DOF &motors;
+    AP_Motors6DOF* motors;
     RC_Channel *&channel_roll;
     RC_Channel *&channel_pitch;
     RC_Channel *&channel_throttle;

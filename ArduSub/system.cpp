@@ -56,6 +56,8 @@ void Sub::init_ardupilot()
     init_rc_out();              // sets up motors and output to escs
     init_joystick();            // joystick initialization
 
+    // allocate the motors class
+    allocate_motors();
 #if AP_RELAY_ENABLED
     relay.init();
 #endif
@@ -206,7 +208,7 @@ bool Sub::ekf_position_ok()
     }
 
     // if disarmed we accept a predicted horizontal position
-    if (!motors.armed()) {
+    if (!motors->armed()) {
         if (ahrs.has_status(AP_AHRS::Status::HORIZ_POS_ABS)) {
             return true;
         }
@@ -248,7 +250,7 @@ bool Sub::optflow_position_ok()
     }
 
     // if disarmed we accept a predicted horizontal relative position
-    if (!motors.armed()) {
+    if (!motors->armed()) {
         return ahrs.has_status(AP_AHRS::Status::PRED_HORIZ_POS_REL);
     }
 
@@ -284,3 +286,19 @@ AP_AdvancedFailsafe *AP::advancedfailsafe() { return nullptr; }
 // dummy method to avoid linking AP_Avoidance
 AP_Avoidance *AP::ap_avoidance() { return nullptr; }
 #endif  // AP_ADSB_AVOIDANCE_ENABLED
+
+/*
+  allocate the motors class
+ */
+void Sub::allocate_motors(void)
+{
+    motors = &_motors;
+    _motors.set_update_rate(scheduler.get_loop_rate_hz());
+    AP_Param::load_object_from_eeprom(motors, AP_Motors6DOF::var_info);
+
+    // reload lines from the defaults file that may now be accessible
+    AP_Param::reload_defaults_file(true);
+
+    // param count could have changed
+    AP_Param::invalidate_count();
+}

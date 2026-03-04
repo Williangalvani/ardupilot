@@ -48,8 +48,8 @@ void Sub::mainloop_failsafe_check()
         // disarm the motors.
         in_failsafe = true;
         // reduce motors to minimum (we do not immediately disarm because we want to log the failure)
-        if (motors.armed()) {
-            motors.output_min();
+        if (motors->armed()) {
+            motors->output_min();
         }
         LOGGER_WRITE_ERROR(LogErrorSubsystem::CPU,LogErrorCode::FAILSAFE_OCCURRED);
     }
@@ -57,9 +57,9 @@ void Sub::mainloop_failsafe_check()
     if (failsafe_enabled && in_failsafe && tnow - failsafe_last_timestamp > 1000000) {
         // disarm motors every second
         failsafe_last_timestamp = tnow;
-        if (motors.armed()) {
-            motors.armed(false);
-            motors.output();
+        if (motors->armed()) {
+            motors->armed(false);
+            motors->output();
         }
     }
 }
@@ -296,7 +296,7 @@ void Sub::failsafe_leak_check()
     LOGGER_WRITE_ERROR(LogErrorSubsystem::FAILSAFE_LEAK, LogErrorCode::FAILSAFE_OCCURRED);
 
     // Handle failsafe action
-    if (failsafe.leak && g.failsafe_leak == FS_LEAK_SURFACE && motors.armed()) {
+    if (failsafe.leak && g.failsafe_leak == FS_LEAK_SURFACE && motors->armed()) {
         set_mode(Mode::Number::SURFACE, ModeReason::LEAK_FAILSAFE);
     }
 }
@@ -342,7 +342,7 @@ void Sub::failsafe_gcs_check()
     }
 
     // do nothing if we have already triggered the failsafe action, or if the motors are disarmed
-    if (failsafe.gcs || !motors.armed()) {
+    if (failsafe.gcs || !motors->armed()) {
         return;
     }
 
@@ -353,11 +353,11 @@ void Sub::failsafe_gcs_check()
     // handle failsafe action
     if (g.failsafe_gcs == FS_GCS_DISARM) {
         arming.disarm(AP_Arming::Method::GCSFAILSAFE);
-    } else if (g.failsafe_gcs == FS_GCS_HOLD && motors.armed()) {
+    } else if (g.failsafe_gcs == FS_GCS_HOLD && motors->armed()) {
         if (!set_mode(Mode::Number::ALT_HOLD, ModeReason::GCS_FAILSAFE)) {
             arming.disarm(AP_Arming::Method::GCS_FAILSAFE_HOLDFAILED);
         }
-    } else if (g.failsafe_gcs == FS_GCS_SURFACE && motors.armed()) {
+    } else if (g.failsafe_gcs == FS_GCS_SURFACE && motors->armed()) {
         if (!set_mode(Mode::Number::SURFACE, ModeReason::GCS_FAILSAFE)) {
             arming.disarm(AP_Arming::Method::GCS_FAILSAFE_SURFACEFAILED);
         }
@@ -375,7 +375,7 @@ void Sub::failsafe_crash_check()
     uint32_t tnow = AP_HAL::millis();
 
     // return immediately if disarmed, or crash checking disabled
-    if (!motors.armed() || g.fs_crash_check == FS_CRASH_DISABLED) {
+    if (!motors->armed() || g.fs_crash_check == FS_CRASH_DISABLED) {
         last_crash_check_pass_ms = tnow;
         failsafe.crash = false;
         return;

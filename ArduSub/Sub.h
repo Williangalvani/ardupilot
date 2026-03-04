@@ -132,6 +132,7 @@ private:
 
     // Global parameters are all contained within the 'g' class.
     Parameters g;
+    AP_Motors6DOF _motors;
     ParametersG2 g2;
 
     // primary input control channels
@@ -265,7 +266,7 @@ private:
     // Baro sensor instance index of the external water pressure sensor
     uint8_t depth_sensor_idx;
 
-    AP_Motors6DOF motors;
+    AP_Motors6DOF* motors;
 
     // Circle
     bool circle_pilot_yaw_override; // true if pilot is overriding yaw
@@ -345,9 +346,7 @@ private:
     // Attitude, Position and Waypoint navigation objects
     // To-Do: move inertial nav up or other navigation variables down here
     AC_AttitudeControl_Sub attitude_control;
-
     AC_PosControl pos_control;
-
     AC_WPNav wp_nav;
     AC_Loiter loiter_nav;
     AC_Circle circle_nav;
@@ -442,6 +441,7 @@ private:
     void userhook_SlowLoop();
     void userhook_SuperSlowLoop();
     void update_home_from_EKF();
+    void set_home_to_current_location_inflight();
     bool set_home_to_current_location(bool lock) override WARN_IF_UNUSED;
     bool set_home(const Location& loc, bool lock) override WARN_IF_UNUSED;
     float get_alt_rel() const WARN_IF_UNUSED;
@@ -493,6 +493,7 @@ private:
     void failsafe_radio_off_event();
     void failsafe_radio_on_event();
 #endif
+    void allocate_motors(void);
     void enable_motor_output();
     void init_joystick();
     void transform_manual_control_to_rc_override(int16_t x, int16_t y, int16_t z, int16_t r, uint16_t buttons, uint16_t buttons2, uint8_t enabled_extensions,

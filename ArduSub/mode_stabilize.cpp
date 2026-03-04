@@ -16,15 +16,15 @@ void ModeStabilize::run()
     float target_roll, target_pitch;
 
     // if not armed set throttle to zero and exit immediately
-    if (!motors.armed()) {
-        motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
+    if (!motors->armed()) {
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
         attitude_control->set_throttle_out(NEUTRAL_THROTTLE,true,g.throttle_filt);
         attitude_control->relax_attitude_controllers();
         sub.last_pilot_heading_rad = ahrs.get_yaw_rad();
         return;
     }
 
-    motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+    motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
     // convert pilot input to lean angles
     // To-Do: convert sub.get_pilot_desired_lean_angles to return angles as floats
@@ -64,6 +64,6 @@ void ModeStabilize::run()
 
     //control_in is range -1000-1000
     //radio_in is raw pwm value
-    motors.set_forward(channel_forward->norm_input());
-    motors.set_lateral(channel_lateral->norm_input());
+    motors->set_forward(channel_forward->norm_input());
+    motors->set_lateral(channel_lateral->norm_input());
 }

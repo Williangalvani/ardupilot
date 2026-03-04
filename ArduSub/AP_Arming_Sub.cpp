@@ -152,7 +152,7 @@ bool AP_Arming_Sub::arm(AP_Arming::Method method, bool do_arming_checks)
     sub.enable_motor_output();
 
     // finally actually arm the motors
-    sub.motors.armed(true);
+    sub.motors->armed(true);
 
 #if HAL_LOGGING_ENABLED
     // log flight mode in case it was changed while vehicle was disarmed
@@ -184,7 +184,7 @@ bool AP_Arming_Sub::arm(AP_Arming::Method method, bool do_arming_checks)
 bool AP_Arming_Sub::disarm(const AP_Arming::Method method, bool do_disarm_checks)
 {
     // return immediately if we are already disarmed
-    if (!sub.motors.armed()) {
+    if (!sub.motors->armed()) {
         return false;
     }
 
@@ -207,7 +207,7 @@ bool AP_Arming_Sub::disarm(const AP_Arming::Method method, bool do_disarm_checks
     }
 
     // send disarm command to motors
-    sub.motors.armed(false);
+    sub.motors->armed(false);
 
     // reset the mission
     sub.mission.reset();

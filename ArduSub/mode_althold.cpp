@@ -37,17 +37,17 @@ void ModeAlthold::run_pre()
     // All limits must be positive
     position_control->D_set_max_speed_accel_cm(sub.get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
 
-    if (!motors.armed()) {
-        motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
+    if (!motors->armed()) {
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
         // Sub vehicles do not stabilize roll/pitch/yaw when not auto-armed (i.e. on the ground, pilot has never raised throttle)
         attitude_control->set_throttle_out(NEUTRAL_THROTTLE,true,g.throttle_filt);
         attitude_control->relax_attitude_controllers();
-        position_control->D_relax_controller(motors.get_throttle_hover());
+        position_control->D_relax_controller(motors->get_throttle_hover());
         sub.last_pilot_heading_rad = ahrs.get_yaw_rad();
         return;
     }
 
-    motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+    motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
     // get pilot desired lean angles
     float target_roll, target_pitch;
@@ -101,8 +101,8 @@ void ModeAlthold::run_pre()
 
 void ModeAlthold::run_post()
 {
-    motors.set_forward(channel_forward->norm_input());
-    motors.set_lateral(channel_lateral->norm_input());
+    motors->set_forward(channel_forward->norm_input());
+    motors->set_lateral(channel_lateral->norm_input());
 }
 
 void ModeAlthold::control_depth() {
@@ -110,7 +110,7 @@ void ModeAlthold::control_depth() {
     // scale linearly between 0.2f and 1.0f as we approach the surface
     float distance_to_surface = (g.surface_depth - inertial_nav.get_position_z_up_cm()) * 0.01f;
     distance_to_surface = constrain_float(distance_to_surface, 0.0f, 1.0f);
-    motors.set_max_throttle(g.surface_max_throttle + (1.0f - g.surface_max_throttle) * distance_to_surface);
+    motors->set_max_throttle(g.surface_max_throttle + (1.0f - g.surface_max_throttle) * distance_to_surface);
 
     float target_climb_rate_cms = sub.get_pilot_desired_climb_rate(channel_throttle->get_control_in());
     target_climb_rate_cms = constrain_float(target_climb_rate_cms, -sub.get_pilot_speed_dn(), g.pilot_speed_up);

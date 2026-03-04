@@ -40,7 +40,7 @@ uint8_t GCS_MAVLINK_Sub::base_mode() const
     // override if stick mixing is enabled
     _base_mode |= MAV_MODE_FLAG_MANUAL_INPUT_ENABLED;
 
-    if (sub.motors.armed()) {
+    if (sub.motors->armed()) {
         _base_mode |= MAV_MODE_FLAG_SAFETY_ARMED;
     }
 
@@ -62,7 +62,7 @@ MAV_STATE GCS_MAVLINK_Sub::vehicle_system_status() const
         return MAV_STATE_CRITICAL;
     }
 
-    if (sub.motors.armed()) {
+    if (sub.motors->armed()) {
         return MAV_STATE_ACTIVE;
     }
     if (!sub.ap.initialised) {
@@ -75,7 +75,7 @@ MAV_STATE GCS_MAVLINK_Sub::vehicle_system_status() const
 void GCS_MAVLINK_Sub::send_banner()
 {
     GCS_MAVLINK::send_banner();
-    send_text(MAV_SEVERITY_INFO, "Frame: %s", sub.motors.get_frame_string());
+    send_text(MAV_SEVERITY_INFO, "Frame: %s", sub.motors->get_frame_string());
 }
 
 void GCS_MAVLINK_Sub::send_nav_controller_output() const
@@ -95,7 +95,7 @@ void GCS_MAVLINK_Sub::send_nav_controller_output() const
 
 int16_t GCS_MAVLINK_Sub::vfr_hud_throttle() const
 {
-    return (int16_t)(sub.motors.get_throttle() * 100);
+    return (int16_t)(sub.motors->get_throttle() * 100);
 }
 
 float GCS_MAVLINK_Sub::vfr_hud_alt() const
@@ -336,7 +336,7 @@ bool GCS_MAVLINK_Sub::handle_guided_request(AP_Mission::Mission_Command &cmd)
 
 MAV_RESULT GCS_MAVLINK_Sub::_handle_command_preflight_calibration_baro(const mavlink_message_t &msg)
 {
-    if (sub.motors.armed()) {
+    if (sub.motors->armed()) {
         gcs().send_text(MAV_SEVERITY_INFO, "Disarm before calibration.");
         return MAV_RESULT_FAILED;
     }
@@ -499,7 +499,7 @@ MAV_RESULT GCS_MAVLINK_Sub::handle_MAV_CMD_DO_CHANGE_SPEED(const mavlink_command
 
 MAV_RESULT GCS_MAVLINK_Sub::handle_MAV_CMD_MISSION_START(const mavlink_command_int_t &packet)
 {
-        if (sub.motors.armed() && sub.set_mode(Mode::Number::AUTO, ModeReason::GCS_COMMAND)) {
+        if (sub.motors->armed() && sub.set_mode(Mode::Number::AUTO, ModeReason::GCS_COMMAND)) {
             return MAV_RESULT_ACCEPTED;
         }
         return MAV_RESULT_FAILED;

@@ -41,8 +41,8 @@ void ModePoshold::run()
 {
     uint32_t tnow = AP_HAL::millis();
     // When unarmed, disable motors and stabilization
-    if (!motors.armed()) {
-        motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
+    if (!motors->armed()) {
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
         // Sub vehicles do not stabilize roll/pitch/yaw when not auto-armed (i.e. on the ground, pilot has never raised throttle)
         attitude_control->set_throttle_out(NEUTRAL_THROTTLE ,true, g.throttle_filt);
         attitude_control->relax_attitude_controllers();
@@ -53,7 +53,7 @@ void ModePoshold::run()
     }
 
     // set motors to full range
-    motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+    motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
     /////////////////////
     // Update attitude //
@@ -128,7 +128,7 @@ void ModePoshold::control_horizontal() {
         lateral_out = body_rates_cms.y / (float)g.pilot_speed;
     }
 
-    motors.set_forward(forward_out);
-    motors.set_lateral(lateral_out);
+    motors->set_forward(forward_out);
+    motors->set_lateral(lateral_out);
 }
 #endif  // POSHOLD_ENABLED

@@ -10,7 +10,7 @@ void Sub::fence_checks_async()
 {
     const uint32_t now = AP_HAL::millis();
     // ignore any fence activity when not armed
-    if (!motors.armed()) {
+    if (!motors->armed()) {
         return;
     }
 

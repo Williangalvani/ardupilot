@@ -3,7 +3,7 @@
 // enable_motor_output() - enable and output lowest possible value to motors
 void Sub::enable_motor_output()
 {
-    motors.output_min();
+    motors->output_min();
 }
 
 // motors_output - send output to motors library which will adjust and send to ESCs and servos
@@ -17,12 +17,12 @@ void Sub::motors_output()
     if (ap.motor_test) {
         verify_motor_test();
     } else {
-        motors.set_interlock(true);
+        motors->set_interlock(true);
         auto &srv = AP::srv();
         srv.cork();
         SRV_Channels::calc_pwm();
         SRV_Channels::output_ch_all();
-        motors.output();
+        motors->output();
         srv.push();
     }
 }
@@ -48,7 +48,7 @@ bool Sub::init_motor_test()
     }
 
     // Make sure we are on the ground
-    if (!motors.armed()) {
+    if (!motors->armed()) {
         gcs().send_text(MAV_SEVERITY_WARNING, "Arm motors before testing motors.");
         return false;
     }
@@ -122,13 +122,13 @@ bool Sub::handle_do_motor_test(mavlink_command_int_t command) {
     }
 
     if (is_equal(throttle_type, (float)MOTOR_TEST_THROTTLE_PWM)) {
-        return motors.output_test_num(motor_number, throttle); // true if motor output is set
+        return motors->output_test_num(motor_number, throttle); // true if motor output is set
     }
 
     if (is_equal(throttle_type, (float)MOTOR_TEST_THROTTLE_PERCENT)) {
         throttle = constrain_float(throttle, 0.0f, 100.0f);
         throttle = channel_throttle->get_radio_min() + throttle * 0.01f * (channel_throttle->get_radio_max() - channel_throttle->get_radio_min());
-        return motors.output_test_num(motor_number, throttle); // true if motor output is set
+        return motors->output_test_num(motor_number, throttle); // true if motor output is set
     }
 
     return false;

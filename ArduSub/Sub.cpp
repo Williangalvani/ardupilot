@@ -26,18 +26,18 @@ const AP_HAL::HAL& hal = AP_HAL::get_HAL();
  */
 Sub::Sub()
     :
-
+          _motors(),
+          g2(),
 #if AP_SUB_RC_ENABLED
           flight_modes(&g.flight_mode1),
 #else
           control_mode(Mode::Number::MANUAL),
 #endif
-          motors(MAIN_LOOP_RATE),
           auto_yaw_mode(AUTO_YAW_LOOK_AT_NEXT_WP),
-          inertial_nav(ahrs),
-          ahrs_view(ahrs, ROTATION_NONE),
-          attitude_control(ahrs_view, motors),
-          pos_control(ahrs_view, motors, attitude_control),
+          inertial_nav(AP::ahrs()),
+          ahrs_view(AP::ahrs(), ROTATION_NONE),
+          attitude_control(ahrs_view, _motors),
+          pos_control(ahrs_view, _motors, attitude_control),
           wp_nav(ahrs_view, pos_control, attitude_control),
           loiter_nav(ahrs_view, pos_control, attitude_control),
           circle_nav(ahrs_view, pos_control),
@@ -46,6 +46,7 @@ Sub::Sub()
           auto_mode(Auto_WP),
           guided_mode(Guided_WP)
 {
+    motors = &_motors;
     failsafe.pilot_input = true;
     if (_singleton != nullptr) {
         AP_HAL::panic("Can only be one Sub");
@@ -176,7 +177,7 @@ constexpr int8_t Sub::_failsafe_priorities[5];
 void Sub::run_rate_controller()
 {
     const float last_loop_time_s = AP::scheduler().get_last_loop_time_s();
-    motors.set_dt_s(last_loop_time_s);
+    motors->set_dt_s(last_loop_time_s);
     attitude_control.set_dt_s(last_loop_time_s);
     pos_control.set_dt_s(last_loop_time_s);
 
@@ -213,7 +214,7 @@ void Sub::update_batt_compass()
 
     if (AP::compass().available()) {
         // update compass with throttle value - used for compassmot
-        compass.set_throttle(motors.get_throttle());
+        compass.set_throttle(motors->get_throttle());
         compass.read();
     }
 }
@@ -236,7 +237,7 @@ void Sub::ten_hz_logging_loop()
         }
     }
     if (should_log(MASK_LOG_MOTBATT)) {
-        motors.Log_Write();
+        motors->Log_Write();
     }
     if (should_log(MASK_LOG_RCIN)) {
         logger.Write_RCIN();
@@ -317,7 +318,7 @@ void Sub::one_hz_loop()
     ap.pre_arm_check = arm_check;
     AP_Notify::flags.pre_arm_check = arm_check;
     AP_Notify::flags.pre_arm_gps_check = position_ok();
-    AP_Notify::flags.flying = motors.armed();
+    AP_Notify::flags.flying = motors->armed();
 
 #if HAL_LOGGING_ENABLED
     if (should_log(MASK_LOG_ANY)) {
@@ -325,8 +326,8 @@ void Sub::one_hz_loop()
     }
 #endif
 
-    if (!motors.armed()) {
-        motors.update_throttle_range();
+    if (!motors->armed()) {
+        motors->update_throttle_range();
     }
 
     // update assigned functions and enable auxiliary servos
@@ -415,7 +416,7 @@ bool Sub::get_wp_crosstrack_error_m(float &xtrack_error) const
 */
 void Sub::stats_update(void)
 {
-    AP::stats()->set_flying(motors.armed());
+    AP::stats()->set_flying(motors->armed());
 }
 #endif
 

@@ -22,9 +22,9 @@ void ModeSurface::run()
     float target_roll, target_pitch;
 
     // if not armed set throttle to zero and exit immediately
-    if (!motors.armed()) {
-        motors.output_min();
-        motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
+    if (!motors->armed()) {
+        motors->output_min();
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
         attitude_control->set_throttle_out(NEUTRAL_THROTTLE,true,g.throttle_filt);
         attitude_control->relax_attitude_controllers();
         position_control->D_init_controller();
@@ -59,6 +59,6 @@ void ModeSurface::run()
         position_control->D_update_controller();
     }
     // pilot has control for repositioning
-    motors.set_forward(channel_forward->norm_input());
-    motors.set_lateral(channel_lateral->norm_input());
+    motors->set_forward(channel_forward->norm_input());
+    motors->set_lateral(channel_lateral->norm_input());
 }
