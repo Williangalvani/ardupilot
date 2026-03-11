@@ -64,16 +64,15 @@ bool NavigatorLED::hw_set_rgb(uint8_t red, uint8_t green, uint8_t blue)
 }
 
 // Get our bytes ready to send the desired color data
-// Datasheet: https://cdn-shop.adafruit.com/datasheets/WS2812B.pdf
-// 24bit msg as 3 byte GRB (not RGB) where first bit is G7, and last bit is B0
-// (first) G7|G6|G5|G4|G3|G2|G1|G0|R7|R6|R5|R4|R3|R2|R1|R0|B7|B6|B5|B4|B3|B2|B1|B0 (last)
+// 24bit msg as 3 byte RGB where first bit is R7, and last bit is B0
+// (first) R7|R6|R5|R4|R3|R2|R1|R0|G7|G6|G5|G4|G3|G2|G1|G0|B7|B6|B5|B4|B3|B2|B1|B0 (last)
 void NavigatorLED::_setup_data(uint8_t red, uint8_t green, uint8_t blue)
 {
     for (uint8_t i = 0; i < 8; i++) {
-        _data[i] = (green & (1<<(7-i))) ? LED_T1 : LED_T0;
+        _data[i] = (red & (1<<(7-i))) ? LED_T1 : LED_T0;
     }
     for (uint8_t i = 0; i < 8; i++) {
-        _data[8 + i] = (red & (1<<(7-i))) ? LED_T1 : LED_T0;
+        _data[8 + i] = (green & (1<<(7-i))) ? LED_T1 : LED_T0;
     }
     for (uint8_t i = 0; i < 8; i++) {
         _data[16 + i] = (blue & (1<<(7-i))) ? LED_T1 : LED_T0;
