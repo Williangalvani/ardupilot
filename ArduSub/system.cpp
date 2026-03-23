@@ -53,11 +53,9 @@ void Sub::init_ardupilot()
 
 
     init_rc_in();               // sets up rc channels from radio
+    allocate_motors();          // allocate motors before init_rc_out (needs motors for frame type)
     init_rc_out();              // sets up motors and output to escs
     init_joystick();            // joystick initialization
-
-    // allocate the motors class
-    allocate_motors();
 #if AP_RELAY_ENABLED
     relay.init();
 #endif
@@ -292,9 +290,48 @@ AP_Avoidance *AP::ap_avoidance() { return nullptr; }
  */
 void Sub::allocate_motors(void)
 {
-    motors = &_motors;
-    _motors.set_update_rate(scheduler.get_loop_rate_hz());
-    AP_Param::load_object_from_eeprom(motors, AP_Motors6DOF::var_info);
+    motors = NEW_NOTHROW AP_Motors6DOF(scheduler.get_loop_rate_hz());
+    motors_var_info = AP_Motors6DOF::var_info;
+    if (motors == nullptr) {
+        AP_BoardConfig::allocation_error("motors");
+    }
+    AP_Param::load_object_from_eeprom(motors, motors_var_info);
+
+    attitude_control = NEW_NOTHROW AC_AttitudeControl_Sub(ahrs_view, *motors);
+    if (attitude_control == nullptr) {
+        AP_BoardConfig::allocation_error("AttitudeControl");
+    }
+    AP_Param::load_object_from_eeprom(attitude_control, AC_AttitudeControl_Sub::var_info);
+
+    pos_control = NEW_NOTHROW AC_PosControl(ahrs_view, *motors, *attitude_control);
+    if (pos_control == nullptr) {
+        AP_BoardConfig::allocation_error("PosControl");
+    }
+    AP_Param::load_object_from_eeprom(pos_control, pos_control->var_info);
+
+    wp_nav = NEW_NOTHROW AC_WPNav(ahrs_view, *pos_control, *attitude_control);
+    if (wp_nav == nullptr) {
+        AP_BoardConfig::allocation_error("WPNav");
+    }
+    AP_Param::load_object_from_eeprom(wp_nav, wp_nav->var_info);
+
+    loiter_nav = NEW_NOTHROW AC_Loiter(ahrs_view, *pos_control, *attitude_control);
+    if (loiter_nav == nullptr) {
+        AP_BoardConfig::allocation_error("LoiterNav");
+    }
+    AP_Param::load_object_from_eeprom(loiter_nav, loiter_nav->var_info);
+
+    circle_nav = NEW_NOTHROW AC_Circle(ahrs_view, *pos_control);
+    if (circle_nav == nullptr) {
+        AP_BoardConfig::allocation_error("CircleNav");
+    }
+    AP_Param::load_object_from_eeprom(circle_nav, circle_nav->var_info);
+
+    // all objects allocated; apply in-code defaults (fatal on failure)
+    AP_Param::set_defaults_from_table(defaults_table, ARRAY_SIZE(defaults_table));
+
+    // ROVs are neutral buoyancy, force MOT_THST_HOVER to 0.5
+    AP_Param::set_by_name("MOT_THST_HOVER", 0.5);
 
     // reload lines from the defaults file that may now be accessible
     AP_Param::reload_defaults_file(true);

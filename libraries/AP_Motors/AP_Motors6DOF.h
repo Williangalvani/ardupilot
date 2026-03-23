@@ -41,15 +41,15 @@ public:
     // output_to_motors - sends minimum values out to the motors
     void output_to_motors() override;
 
-    void set_max_throttle(float max_throttle) { _max_throttle = max_throttle; }
+    void set_max_throttle(float max_throttle) override { _max_throttle = max_throttle; }
 
     // returns a vector with roll, pitch, and yaw contributions
-    Vector3f get_motor_angular_factors(int motor_number);
+    Vector3f get_motor_angular_factors(int motor_number) override;
 
     // returns true if motor is enabled
-    bool motor_is_enabled(int motor_number);
+    bool motor_is_enabled(int motor_number) override;
 
-    bool set_reversed(int motor_number, bool reversed);
+    bool set_reversed(int motor_number, bool reversed) override;
 
     // var_info for holding Parameter information
     static const struct AP_Param::GroupInfo        var_info[];

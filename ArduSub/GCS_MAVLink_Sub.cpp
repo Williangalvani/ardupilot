@@ -80,15 +80,15 @@ void GCS_MAVLINK_Sub::send_banner()
 
 void GCS_MAVLINK_Sub::send_nav_controller_output() const
 {
-    const Vector3f &targets = sub.attitude_control.get_att_target_euler_cd();
+    const Vector3f &targets = sub.attitude_control->get_att_target_euler_cd();
     mavlink_msg_nav_controller_output_send(
         chan,
         targets.x * 1.0e-2f,
         targets.y * 1.0e-2f,
         targets.z * 1.0e-2f,
-        sub.wp_nav.get_wp_bearing_to_destination_cd() * 1.0e-2f,
-        MIN(sub.wp_nav.get_wp_distance_to_destination_cm() * 1.0e-2f, UINT16_MAX),
-        sub.pos_control.get_pos_error_U_cm() * 1.0e-2f,
+        sub.wp_nav->get_wp_bearing_to_destination_cd() * 1.0e-2f,
+        MIN(sub.wp_nav->get_wp_distance_to_destination_cm() * 1.0e-2f, UINT16_MAX),
+        sub.pos_control->get_pos_error_U_cm() * 1.0e-2f,
         0,
         0);
 }
@@ -234,7 +234,7 @@ void GCS_MAVLINK_Sub::send_pid_tuning()
 {
     const Parameters &g = sub.g;
     AP_AHRS &ahrs = AP::ahrs();
-    AC_AttitudeControl_Sub &attitude_control = sub.attitude_control;
+    AC_AttitudeControl_Sub &attitude_control = *sub.attitude_control;
 
     const Vector3f &gyro = ahrs.get_gyro();
     if (g.gcs_pid_mask & 1) {
@@ -283,7 +283,7 @@ void GCS_MAVLINK_Sub::send_pid_tuning()
         }
     }
     if (g.gcs_pid_mask & 8) {
-        const AP_PIDInfo &pid_info = sub.pos_control.D_get_accel_pid().get_pid_info();
+        const AP_PIDInfo &pid_info = sub.pos_control->D_get_accel_pid().get_pid_info();
         mavlink_msg_pid_tuning_send(chan, PID_TUNING_ACCZ,
                                     pid_info.target*0.01f,
                                     -(ahrs.get_accel_ef().z + GRAVITY_MSS),
@@ -490,7 +490,7 @@ MAV_RESULT GCS_MAVLINK_Sub::handle_MAV_CMD_DO_CHANGE_SPEED(const mavlink_command
 
         case SPEED_TYPE_AIRSPEED: // Airspeed is treated as ground speed for GCS compatibility
         case SPEED_TYPE_GROUNDSPEED:
-            sub.wp_nav.set_speed_NE_cms(packet.param2 * 100.0);
+            sub.wp_nav->set_speed_NE_cms(packet.param2 * 100.0);
             return MAV_RESULT_ACCEPTED;
     }
 
@@ -584,10 +584,10 @@ void GCS_MAVLINK_Sub::handle_message(const mavlink_message_t &msg)
             climb_rate_cms = 0.0f;
         } else if (packet.thrust > 0.5f) {
             // climb at up to WP_SPD_UP
-            climb_rate_cms = (packet.thrust - 0.5f) * 2.0f * sub.wp_nav.get_default_speed_up_cms();
+            climb_rate_cms = (packet.thrust - 0.5f) * 2.0f * sub.wp_nav->get_default_speed_up_cms();
         } else {
             // descend at up to WP_SPD_DN
-            climb_rate_cms = (packet.thrust - 0.5f) * 2.0f * sub.wp_nav.get_default_speed_down_cms();
+            climb_rate_cms = (packet.thrust - 0.5f) * 2.0f * sub.wp_nav->get_default_speed_down_cms();
         }
         sub.mode_guided.guided_set_angle(Quaternion(packet.q[0],packet.q[1],packet.q[2],packet.q[3]), climb_rate_cms);
         break;
@@ -698,7 +698,7 @@ void GCS_MAVLINK_Sub::handle_message(const mavlink_message_t &msg)
          */
 
         if (!z_ignore && sub.control_mode == Mode::Number::ALT_HOLD) { // Control only target depth when in ALT_HOLD
-            sub.pos_control.set_pos_desired_U_cm(packet.alt*100);
+            sub.pos_control->set_pos_desired_U_cm(packet.alt*100);
             break;
         }
 
@@ -800,7 +800,7 @@ int16_t GCS_MAVLINK_Sub::high_latency_target_altitude() const
 
     //return units are m
     if (sub.control_mode == Mode::Number::AUTO || sub.control_mode == Mode::Number::GUIDED) {
-        return 0.01 * (global_position_current.alt + sub.pos_control.get_pos_error_U_cm());
+        return 0.01 * (global_position_current.alt + sub.pos_control->get_pos_error_U_cm());
     }
     return 0;
     
@@ -811,7 +811,7 @@ uint8_t GCS_MAVLINK_Sub::high_latency_tgt_heading() const
     // return units are deg/2
     if (sub.control_mode == Mode::Number::AUTO || sub.control_mode == Mode::Number::GUIDED) {
         // need to convert -18000->18000 to 0->360/2
-        return wrap_360_cd(sub.wp_nav.get_wp_bearing_to_destination_cd()) / 200;
+        return wrap_360_cd(sub.wp_nav->get_wp_bearing_to_destination_cd()) / 200;
     }
     return 0;      
 }
@@ -820,7 +820,7 @@ uint16_t GCS_MAVLINK_Sub::high_latency_tgt_dist() const
 {
     // return units are dm
     if (sub.control_mode == Mode::Number::AUTO || sub.control_mode == Mode::Number::GUIDED) {
-        return MIN(sub.wp_nav.get_wp_distance_to_destination_cm() * 0.001, UINT16_MAX);
+        return MIN(sub.wp_nav->get_wp_distance_to_destination_cm() * 0.001, UINT16_MAX);
     }
     return 0;
 }
@@ -829,7 +829,7 @@ uint8_t GCS_MAVLINK_Sub::high_latency_tgt_airspeed() const
 {
     // return units are m/s*5
     if (sub.control_mode == Mode::Number::AUTO || sub.control_mode == Mode::Number::GUIDED) {
-        return MIN((sub.pos_control.get_vel_desired_NEU_cms().length()/100) * 5, UINT8_MAX);
+        return MIN((sub.pos_control->get_vel_desired_NEU_cms().length()/100) * 5, UINT8_MAX);
     }
     return 0;
 }

@@ -88,7 +88,7 @@ bool ModeSurftrak::set_rangefinder_target_cm(float target_cm)
 
         // Initialize the terrain offset
         auto terrain_offset_cm = sub.inertial_nav.get_position_z_up_cm() - rangefinder_target_cm;
-        sub.pos_control.init_pos_terrain_U_cm(terrain_offset_cm);
+        sub.pos_control->init_pos_terrain_U_cm(terrain_offset_cm);
 
     } else {
         reset();
@@ -103,7 +103,7 @@ void ModeSurftrak::reset()
     rangefinder_target_cm = INVALID_TARGET;
 
     // Reset the terrain offset
-    sub.pos_control.init_pos_terrain_U_cm(0);
+    sub.pos_control->init_pos_terrain_U_cm(0);
 }
 
 /*
@@ -169,7 +169,7 @@ void ModeSurftrak::update_surface_offset()
             }
 
             // Set the offset target, AC_PosControl will do the rest
-            sub.pos_control.set_pos_terrain_target_U_cm(rangefinder_terrain_offset_cm);
+            sub.pos_control->set_pos_terrain_target_U_cm(rangefinder_terrain_offset_cm);
         }
     }
 #endif  // AP_RANGEFINDER_ENABLED

@@ -389,7 +389,7 @@ void Sub::failsafe_crash_check()
     }
 
     // check for angle error over 30 degrees
-    const float angle_error = attitude_control.get_att_error_angle_deg();
+    const float angle_error = attitude_control->get_att_error_angle_deg();
     if (angle_error <= CRASH_CHECK_ANGLE_DEVIATION_DEG) {
         last_crash_check_pass_ms = tnow;
         failsafe.crash = false;

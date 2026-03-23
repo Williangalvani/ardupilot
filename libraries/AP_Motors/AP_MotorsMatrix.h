@@ -29,6 +29,11 @@ public:
         return _singleton;
     }
 
+    // release singleton so a different subclass can be allocated
+    static void release_singleton() {
+        _singleton = nullptr;
+    }
+
     // init
     virtual void        init(motor_frame_class frame_class, motor_frame_type frame_type) override;
 
@@ -74,6 +79,12 @@ public:
     // disable the use of motor torque to control yaw. Used when an external mechanism such
     // as vectoring is used for yaw control
     void                disable_yaw_torque(void) override;
+
+    // 6DOF / Sub interface (override in AP_Motors6DOF and AP_MotorsMatrix_6DoF_Scripting)
+    virtual Vector3f    get_motor_angular_factors(int motor_number) { (void)motor_number; return Vector3f(0, 0, 0); }
+    virtual bool        motor_is_enabled(int motor_number);
+    virtual bool        set_reversed(int motor_number, bool reversed) { (void)motor_number; (void)reversed; return false; }
+    virtual void        set_max_throttle(float max_throttle) { (void)max_throttle; }
 
     // add_motor using raw roll, pitch, throttle and yaw factors
     void                add_motor_raw(int8_t motor_num, float roll_fac, float pitch_fac, float yaw_fac, uint8_t testing_order, float throttle_factor = 1.0f);

@@ -132,7 +132,6 @@ private:
 
     // Global parameters are all contained within the 'g' class.
     Parameters g;
-    AP_Motors6DOF _motors;
     ParametersG2 g2;
 
     // primary input control channels
@@ -266,7 +265,8 @@ private:
     // Baro sensor instance index of the external water pressure sensor
     uint8_t depth_sensor_idx;
 
-    AP_Motors6DOF* motors;
+    AP_MotorsMatrix* motors;
+    const struct AP_Param::GroupInfo *motors_var_info;
 
     // Circle
     bool circle_pilot_yaw_override; // true if pilot is overriding yaw
@@ -345,11 +345,11 @@ private:
 
     // Attitude, Position and Waypoint navigation objects
     // To-Do: move inertial nav up or other navigation variables down here
-    AC_AttitudeControl_Sub attitude_control;
-    AC_PosControl pos_control;
-    AC_WPNav wp_nav;
-    AC_Loiter loiter_nav;
-    AC_Circle circle_nav;
+    AC_AttitudeControl_Sub *attitude_control;
+    AC_PosControl *pos_control;
+    AC_WPNav *wp_nav;
+    AC_Loiter *loiter_nav;
+    AC_Circle *circle_nav;
 
     // Camera
 #if AP_CAMERA_ENABLED

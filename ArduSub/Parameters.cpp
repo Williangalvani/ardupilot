@@ -553,25 +553,25 @@ const AP_Param::Info Sub::var_info[] = {
 
     // @Group: WP_
     // @Path: ../libraries/AC_WPNav/AC_WPNav.cpp
-    GOBJECT(wp_nav, "WP_", AC_WPNav),
+    GOBJECTPTR(wp_nav, "WP_", AC_WPNav),
 
     // @Group: LOIT_
     // @Path: ../libraries/AC_WPNav/AC_Loiter.cpp
-    GOBJECT(loiter_nav, "LOIT_", AC_Loiter),
+    GOBJECTPTR(loiter_nav, "LOIT_", AC_Loiter),
 
 #if CIRCLE_NAV_ENABLED
     // @Group: CIRCLE_
     // @Path: ../libraries/AC_WPNav/AC_Circle.cpp
-    GOBJECT(circle_nav, "CIRCLE_",  AC_Circle),
+    GOBJECTPTR(circle_nav, "CIRCLE_",  AC_Circle),
 #endif
 
     // @Group: ATC_
     // @Path: ../libraries/AC_AttitudeControl/AC_AttitudeControl.cpp,../libraries/AC_AttitudeControl/AC_AttitudeControl_Sub.cpp
-    GOBJECT(attitude_control, "ATC_", AC_AttitudeControl_Sub),
+    GOBJECTPTR(attitude_control, "ATC_", AC_AttitudeControl_Sub),
 
     // @Group: PSC
     // @Path: ../libraries/AC_AttitudeControl/AC_PosControl.cpp
-    GOBJECT(pos_control, "PSC", AC_PosControl),
+    GOBJECTPTR(pos_control, "PSC", AC_PosControl),
 
     // @Group: AHRS_
     // @Path: ../libraries/AP_AHRS/AP_AHRS.cpp
@@ -638,8 +638,8 @@ const AP_Param::Info Sub::var_info[] = {
 #endif
 
     // @Group: MOT_
-    // @Path: ../libraries/AP_Motors/AP_Motors6DOF.cpp,../libraries/AP_Motors/AP_MotorsMulticopter.cpp
-    GOBJECT(motors, "MOT_",         AP_Motors6DOF),
+    // @Path: ../libraries/AP_Motors/AP_Motors6DOF.cpp,../libraries/AP_Motors/AP_MotorsMatrix_6DoF_Scripting.cpp,../libraries/AP_Motors/AP_MotorsMulticopter.cpp
+    GOBJECTVARPTR(motors, "MOT_",   &sub.motors_var_info),
 
 #if RCMAP_ENABLED
     // @Group: RCMAP_
@@ -795,9 +795,12 @@ void Sub::load_parameters()
     AP_Param::set_frame_type_flags(AP_PARAM_FRAME_SUB);
 
     convert_old_parameters();
-    AP_Param::set_defaults_from_table(defaults_table, ARRAY_SIZE(defaults_table));
-    // We should ignore this parameter since ROVs are neutral buoyancy
-    AP_Param::set_by_name("MOT_THST_HOVER", 0.5);
+    // apply defaults non-fatally; params from heap-allocated objects
+    // (motors, attitude_control, pos_control, wp_nav, circle_nav)
+    // will be unavailable until allocate_motors() runs
+    for (const auto &d : defaults_table) {
+        AP_Param::set_default_by_name(d.name, d.value);
+    }
 
     // PARAMETER_CONVERSION - Added: Mar-2022
 #if AP_FENCE_ENABLED
@@ -857,16 +860,16 @@ void Sub::load_parameters()
 #endif  // HAL_GCS_ENABLED
 
     // upgrade attitude controller parameters
-    sub.attitude_control.convert_parameters();
+    sub.attitude_control->convert_parameters();
 
     // upgrade waypoint navigation parameters
-    wp_nav.convert_parameters();
+    wp_nav->convert_parameters();
 
     // upgrade loiter navigation parameters
-    loiter_nav.convert_parameters();
+    loiter_nav->convert_parameters();
 
 #if CIRCLE_NAV_ENABLED
-    circle_nav.convert_parameters();
+    circle_nav->convert_parameters();
 #endif
 
     // PARAMETER_CONVERSION - Added: Jan-2026

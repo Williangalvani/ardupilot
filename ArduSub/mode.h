@@ -98,15 +98,15 @@ protected:
     ParametersG2 &g2;
     AP_InertialNav &inertial_nav;
     AP_AHRS &ahrs;
-    AP_Motors6DOF* motors;
+    AP_MotorsMatrix*& motors;
     RC_Channel *&channel_roll;
     RC_Channel *&channel_pitch;
     RC_Channel *&channel_throttle;
     RC_Channel *&channel_yaw;
     RC_Channel *&channel_forward;
     RC_Channel *&channel_lateral;
-    AC_PosControl *position_control;
-    AC_AttitudeControl_Sub *attitude_control;
+    AC_PosControl *&position_control;
+    AC_AttitudeControl_Sub *&attitude_control;
     // TODO: channels
     float &G_Dt;
 

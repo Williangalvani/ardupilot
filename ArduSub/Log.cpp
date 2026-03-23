@@ -40,17 +40,17 @@ void Sub::Log_Write_Control_Tuning()
     struct log_Control_Tuning pkt = {
         LOG_PACKET_HEADER_INIT(LOG_CONTROL_TUNING_MSG),
         time_us             : AP_HAL::micros64(),
-        throttle_in         : attitude_control.get_throttle_in(),
-        angle_boost         : attitude_control.angle_boost(),
+        throttle_in         : attitude_control->get_throttle_in(),
+        angle_boost         : attitude_control->angle_boost(),
         throttle_out        : motors->get_throttle(),
         throttle_hover      : motors->get_throttle_hover(),
-        desired_alt         : pos_control.get_pos_target_U_cm() * 0.01f,
+        desired_alt         : pos_control->get_pos_target_U_cm() * 0.01f,
         inav_alt            : inertial_nav.get_position_z_up_cm() * 0.01f,
         baro_alt            : barometer.get_altitude(),
         desired_rangefinder_alt   : mode_surftrak.get_rangefinder_target_cm() * 0.01,
         rangefinder_alt           : rangefinder_state.alt,
         terr_alt            : terr_alt,
-        target_climb_rate   : (int16_t)pos_control.get_vel_target_U_cms(),
+        target_climb_rate   : (int16_t)pos_control->get_vel_target_U_cms(),
         climb_rate          : climb_rate
     };
     logger.WriteBlock(&pkt, sizeof(pkt));
@@ -59,7 +59,7 @@ void Sub::Log_Write_Control_Tuning()
 // Write an attitude packet
 void Sub::Log_Write_Attitude()
 {
-    ahrs.Write_Attitude(attitude_control.get_att_target_euler_rad() * RAD_TO_DEG);
+    ahrs.Write_Attitude(attitude_control->get_att_target_euler_rad() * RAD_TO_DEG);
 
     AP::ahrs().Log_Write();
 }

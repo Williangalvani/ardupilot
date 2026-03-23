@@ -15,13 +15,13 @@ bool ModeCircle::init(bool ignore_checks)
 
     // initialize speeds and accelerations
     // All limits must be positive
-    position_control->NE_set_max_speed_accel_cm(sub.wp_nav.get_default_speed_NE_cms(), sub.wp_nav.get_wp_acceleration_cmss());
-    position_control->NE_set_correction_speed_accel_cm(sub.wp_nav.get_default_speed_NE_cms(), sub.wp_nav.get_wp_acceleration_cmss());
+    position_control->NE_set_max_speed_accel_cm(sub.wp_nav->get_default_speed_NE_cms(), sub.wp_nav->get_wp_acceleration_cmss());
+    position_control->NE_set_correction_speed_accel_cm(sub.wp_nav->get_default_speed_NE_cms(), sub.wp_nav->get_wp_acceleration_cmss());
     position_control->D_set_max_speed_accel_cm(sub.get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
     position_control->D_set_correction_speed_accel_cm(sub.get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
 
     // initialise circle controller including setting the circle center based on vehicle speed
-    sub.circle_nav.init();
+    sub.circle_nav->init();
 
     return true;
 }
@@ -35,11 +35,11 @@ void ModeCircle::run()
 
     // update parameters, to allow changing at runtime
     // All limits must be positive
-    position_control->NE_set_max_speed_accel_cm(sub.wp_nav.get_default_speed_NE_cms(), sub.wp_nav.get_wp_acceleration_cmss());
+    position_control->NE_set_max_speed_accel_cm(sub.wp_nav->get_default_speed_NE_cms(), sub.wp_nav->get_wp_acceleration_cmss());
     position_control->D_set_max_speed_accel_cm(sub.get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
 
     // check for any change in params and update in real time
-    sub.circle_nav.check_param_change();
+    sub.circle_nav->check_param_change();
 
     // if not armed set throttle to zero and exit immediately
     if (!motors->armed()) {
@@ -48,7 +48,7 @@ void ModeCircle::run()
         // Sub vehicles do not stabilize roll/pitch/yaw when disarmed
         attitude_control->set_throttle_out(NEUTRAL_THROTTLE,true,g.throttle_filt);
         attitude_control->relax_attitude_controllers();
-        sub.circle_nav.init();
+        sub.circle_nav->init();
         return;
     }
 
@@ -66,7 +66,7 @@ void ModeCircle::run()
     motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
     // run circle controller
-    sub.failsafe_terrain_set_status(sub.circle_nav.update_cms());
+    sub.failsafe_terrain_set_status(sub.circle_nav->update_cms());
 
     ///////////////////////
     // update xy outputs //
@@ -82,7 +82,7 @@ void ModeCircle::run()
     if (sub.circle_pilot_yaw_override) {
         attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw_cd(channel_roll->get_control_in(), channel_pitch->get_control_in(), target_yaw_rate);
     } else {
-        attitude_control->input_euler_angle_roll_pitch_yaw_cd(channel_roll->get_control_in(), channel_pitch->get_control_in(), sub.circle_nav.get_yaw_cd(), true);
+        attitude_control->input_euler_angle_roll_pitch_yaw_cd(channel_roll->get_control_in(), channel_pitch->get_control_in(), sub.circle_nav->get_yaw_cd(), true);
     }
 
     // update altitude target and call position controller

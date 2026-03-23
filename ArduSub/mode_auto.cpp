@@ -21,7 +21,7 @@ bool ModeAuto::init(bool ignore_checks) {
     }
 
     // initialise waypoint controller
-    sub.wp_nav.wp_and_spline_init_m();
+    sub.wp_nav->wp_and_spline_init_m();
 
     // clear guided limits
     guided_limit_clear();
@@ -71,7 +71,7 @@ void ModeAuto::auto_wp_start(const Vector3f& destination)
     sub.auto_mode = Auto_WP;
 
     // initialise wpnav (no need to check return status because terrain data is not used)
-    sub.wp_nav.set_wp_destination_NEU_cm(destination, false);
+    sub.wp_nav->set_wp_destination_NEU_cm(destination, false);
 
     // initialise yaw
     // To-Do: reset the yaw only when the previous navigation command is not a WP.  this would allow removing the special check for ROI
@@ -86,7 +86,7 @@ void ModeAuto::auto_wp_start(const Location& dest_loc)
     sub.auto_mode = Auto_WP;
 
     // send target to waypoint controller
-    if (!sub.wp_nav.set_wp_destination_loc(dest_loc)) {
+    if (!sub.wp_nav->set_wp_destination_loc(dest_loc)) {
         // failure to set destination can only be because of missing terrain data
         gcs().send_text(MAV_SEVERITY_WARNING, "Terrain data (rangefinder) not available");
         sub.failsafe_terrain_on_event();
@@ -113,7 +113,7 @@ void ModeAuto::auto_wp_run()
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
         attitude_control->set_throttle_out(NEUTRAL_THROTTLE,true,g.throttle_filt);
         attitude_control->relax_attitude_controllers();
-        sub.wp_nav.wp_and_spline_init_m();                                                // Reset xy target
+        sub.wp_nav->wp_and_spline_init_m();                                                // Reset xy target
         return;
     }
 
@@ -134,7 +134,7 @@ void ModeAuto::auto_wp_run()
     // TODO logic for terrain tracking target going below fence limit
     // TODO implement waypoint radius individually for each waypoint based on cmd.p2
     // TODO fix auto yaw heading to switch to something appropriate when mission complete and switches to loiter
-    sub.failsafe_terrain_set_status(sub.wp_nav.update_wpnav());
+    sub.failsafe_terrain_set_status(sub.wp_nav->update_wpnav());
 
     ///////////////////////
     // update xy outputs //
@@ -168,27 +168,27 @@ void ModeAuto::auto_wp_run()
 }
 
 // auto_circle_movetoedge_start - initialise waypoint controller to move to edge of a circle with it's center at the specified location
-//  we assume the caller has set the circle's circle with sub.circle_nav.set_center()
+//  we assume the caller has set the circle's circle with sub.circle_nav->set_center()
 //  we assume the caller has performed all required GPS_ok checks
 void ModeAuto::auto_circle_movetoedge_start(const Location &circle_center, float radius_m, bool ccw_turn)
 {
     // set circle center
-    sub.circle_nav.set_center(circle_center);
+    sub.circle_nav->set_center(circle_center);
 
     // set circle radius
     if (!is_zero(radius_m)) {
-        sub.circle_nav.set_radius_cm(radius_m * 100.0f);
+        sub.circle_nav->set_radius_cm(radius_m * 100.0f);
     }
 
      // set circle direction by using rate
-    float current_rate = sub.circle_nav.get_rate_degs();
+    float current_rate = sub.circle_nav->get_rate_degs();
     current_rate = ccw_turn ? -fabsf(current_rate) : fabsf(current_rate);
-    sub.circle_nav.set_rate_degs(current_rate);
+    sub.circle_nav->set_rate_degs(current_rate);
 
     // check our distance from edge of circle
     Vector3f circle_edge_neu_cm;
     float dist_to_edge;
-    sub.circle_nav.get_closest_point_on_circle_NEU_cm(circle_edge_neu_cm, dist_to_edge);
+    sub.circle_nav->get_closest_point_on_circle_NEU_cm(circle_edge_neu_cm, dist_to_edge);
 
     // if more than 3m then fly to edge
     if (dist_to_edge > 300.0f) {
@@ -202,14 +202,14 @@ void ModeAuto::auto_circle_movetoedge_start(const Location &circle_center, float
         circle_edge.copy_alt_from(circle_center);
 
         // initialise wpnav to move to edge of circle
-        if (!sub.wp_nav.set_wp_destination_loc(circle_edge)) {
+        if (!sub.wp_nav->set_wp_destination_loc(circle_edge)) {
             // failure to set destination can only be because of missing terrain data
             sub.failsafe_terrain_on_event();
         }
 
         // if we are outside the circle, point at the edge, otherwise hold yaw
-        float dist_to_center = get_horizontal_distance(inertial_nav.get_position_xy_cm().topostype(), sub.circle_nav.get_center_NEU_cm().xy());
-        if (dist_to_center > sub.circle_nav.get_radius_cm() && dist_to_center > 500) {
+        float dist_to_center = get_horizontal_distance(inertial_nav.get_position_xy_cm().topostype(), sub.circle_nav->get_center_NEU_cm().xy());
+        if (dist_to_center > sub.circle_nav->get_radius_cm() && dist_to_center > 500) {
             set_auto_yaw_mode(get_default_auto_yaw_mode(false));
         } else {
             // vehicle is within circle so hold yaw to avoid spinning as we move to edge of circle
@@ -227,7 +227,7 @@ void ModeAuto::auto_circle_start()
     sub.auto_mode = Auto_Circle;
 
     // initialise circle controller
-    sub.circle_nav.init_NEU_cm(sub.circle_nav.get_center_NEU_cm(), sub.circle_nav.center_is_terrain_alt(), sub.circle_nav.get_rate_degs());
+    sub.circle_nav->init_NEU_cm(sub.circle_nav->get_center_NEU_cm(), sub.circle_nav->center_is_terrain_alt(), sub.circle_nav->get_rate_degs());
 }
 
 // auto_circle_run - circle in AUTO flight mode
@@ -235,7 +235,7 @@ void ModeAuto::auto_circle_start()
 void ModeAuto::auto_circle_run()
 {
     // call circle controller
-    sub.failsafe_terrain_set_status(sub.circle_nav.update_cms());
+    sub.failsafe_terrain_set_status(sub.circle_nav->update_cms());
 
     float lateral_out, forward_out;
     sub.translate_circle_nav_rp(lateral_out, forward_out);
@@ -249,7 +249,7 @@ void ModeAuto::auto_circle_run()
     position_control->D_update_controller();
 
     // roll & pitch from waypoint controller, yaw rate from pilot
-    attitude_control->input_euler_angle_roll_pitch_yaw_cd(channel_roll->get_control_in(), channel_pitch->get_control_in(), sub.circle_nav.get_yaw_cd(), true);
+    attitude_control->input_euler_angle_roll_pitch_yaw_cd(channel_roll->get_control_in(), channel_pitch->get_control_in(), sub.circle_nav->get_yaw_cd(), true);
 }
 
 #if NAV_GUIDED
@@ -283,10 +283,10 @@ bool ModeAuto::auto_loiter_start()
 
     // calculate stopping point
     Vector3f stopping_point_neu_cm;
-    sub.wp_nav.get_wp_stopping_point_NEU_cm(stopping_point_neu_cm);
+    sub.wp_nav->get_wp_stopping_point_NEU_cm(stopping_point_neu_cm);
 
     // initialise waypoint controller target to stopping point
-    sub.wp_nav.set_wp_destination_NEU_cm(stopping_point_neu_cm);
+    sub.wp_nav->set_wp_destination_NEU_cm(stopping_point_neu_cm);
 
     // hold yaw at current heading
     set_auto_yaw_mode(AUTO_YAW_HOLD);
@@ -305,7 +305,7 @@ void ModeAuto::auto_loiter_run()
         attitude_control->set_throttle_out(NEUTRAL_THROTTLE,true,g.throttle_filt);
         attitude_control->relax_attitude_controllers();
 
-        sub.wp_nav.wp_and_spline_init_m();                                                // Reset xy target
+        sub.wp_nav->wp_and_spline_init_m();                                                // Reset xy target
         return;
     }
 
@@ -319,7 +319,7 @@ void ModeAuto::auto_loiter_run()
     motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
     // run waypoint and z-axis position controller
-    sub.failsafe_terrain_set_status(sub.wp_nav.update_wpnav());
+    sub.failsafe_terrain_set_status(sub.wp_nav->update_wpnav());
 
     ///////////////////////
     // update xy outputs //
@@ -451,16 +451,16 @@ bool ModeAuto::auto_terrain_recover_start()
     sub.mission.stop();
 
     // Reset xy target
-    sub.loiter_nav.clear_pilot_desired_acceleration();
-    sub.loiter_nav.init_target();
+    sub.loiter_nav->clear_pilot_desired_acceleration();
+    sub.loiter_nav->init_target();
 
     // Reset z axis controller
     position_control->D_relax_controller(motors->get_throttle_hover());
 
     // initialize vertical maximum speeds and acceleration
     // All limits must be positive
-    position_control->D_set_max_speed_accel_cm(sub.wp_nav.get_default_speed_down_cms(), sub.wp_nav.get_default_speed_up_cms(), sub.wp_nav.get_accel_D_cmss());
-    position_control->D_set_correction_speed_accel_cm(sub.wp_nav.get_default_speed_down_cms(), sub.wp_nav.get_default_speed_up_cms(), sub.wp_nav.get_accel_D_cmss());
+    position_control->D_set_max_speed_accel_cm(sub.wp_nav->get_default_speed_down_cms(), sub.wp_nav->get_default_speed_up_cms(), sub.wp_nav->get_accel_D_cmss());
+    position_control->D_set_correction_speed_accel_cm(sub.wp_nav->get_default_speed_down_cms(), sub.wp_nav->get_default_speed_up_cms(), sub.wp_nav->get_accel_D_cmss());
 
     gcs().send_text(MAV_SEVERITY_WARNING, "Attempting auto failsafe recovery");
     return true;
@@ -482,7 +482,7 @@ void ModeAuto::auto_terrain_recover_run()
         attitude_control->set_throttle_out(NEUTRAL_THROTTLE,true,g.throttle_filt);
         attitude_control->relax_attitude_controllers();
 
-        sub.loiter_nav.init_target();                                                   // Reset xy target
+        sub.loiter_nav->init_target();                                                   // Reset xy target
         position_control->D_relax_controller(motors->get_throttle_hover());                // Reset z axis controller
         return;
     }
@@ -492,12 +492,12 @@ void ModeAuto::auto_terrain_recover_run()
     switch (sub.rangefinder.status_orient(ROTATION_PITCH_270)) {
 
     case RangeFinder::Status::OutOfRangeLow:
-        target_climb_rate = sub.wp_nav.get_default_speed_up_cms();
+        target_climb_rate = sub.wp_nav->get_default_speed_up_cms();
         rangefinder_recovery_ms = 0;
         break;
 
     case RangeFinder::Status::OutOfRangeHigh:
-        target_climb_rate = sub.wp_nav.get_default_speed_down_cms();
+        target_climb_rate = sub.wp_nav->get_default_speed_down_cms();
         rangefinder_recovery_ms = 0;
         break;
 
@@ -548,7 +548,7 @@ void ModeAuto::auto_terrain_recover_run()
     }
 
     // run loiter controller
-    sub.loiter_nav.update();
+    sub.loiter_nav->update();
 
     ///////////////////////
     // update xy targets //

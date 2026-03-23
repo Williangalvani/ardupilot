@@ -8,14 +8,15 @@ Mode::Mode(void) :
     g2(sub.g2),
     inertial_nav(sub.inertial_nav),
     ahrs(sub.ahrs),
+    motors(sub.motors),
     channel_roll(sub.channel_roll),
     channel_pitch(sub.channel_pitch),
     channel_throttle(sub.channel_throttle),
     channel_yaw(sub.channel_yaw),
     channel_forward(sub.channel_forward),
     channel_lateral(sub.channel_lateral),
-    position_control(&sub.pos_control),
-    attitude_control(&sub.attitude_control),
+    position_control(sub.pos_control),
+    attitude_control(sub.attitude_control),
     G_Dt(sub.G_Dt)
 { };
 

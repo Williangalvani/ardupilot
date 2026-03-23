@@ -499,6 +499,14 @@ bool AP_MotorsMatrix::output_test_num(uint8_t output_channel, int16_t pwm)
     return true;
 }
 
+bool AP_MotorsMatrix::motor_is_enabled(int motor_number)
+{
+    if (motor_number < 0 || motor_number >= AP_MOTORS_MAX_NUM_MOTORS) {
+        return false;
+    }
+    return motor_enabled[motor_number];
+}
+
 // add_motor
 void AP_MotorsMatrix::add_motor_raw(int8_t motor_num, float roll_fac, float pitch_fac, float yaw_fac, uint8_t testing_order, float throttle_factor)
 {

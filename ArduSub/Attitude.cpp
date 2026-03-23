@@ -5,7 +5,7 @@
 void Sub::get_pilot_desired_lean_angles(float roll_in, float pitch_in, float &roll_out, float &pitch_out, float angle_max)
 {
     // sanity check angle max parameter
-    const float angle_max_cd = attitude_control.lean_angle_max_cd();
+    const float angle_max_cd = attitude_control->lean_angle_max_cd();
 
     // limit max lean angle
     angle_max = constrain_float(angle_max, 1000, angle_max_cd);
@@ -46,7 +46,7 @@ void Sub::check_ekf_yaw_reset()
     float yaw_angle_change_rad;
     uint32_t new_ekfYawReset_ms = ahrs.getLastYawResetAngle(yaw_angle_change_rad);
     if (new_ekfYawReset_ms != ekfYawReset_ms) {
-        attitude_control.inertial_frame_reset();
+        attitude_control->inertial_frame_reset();
         ekfYawReset_ms = new_ekfYawReset_ms;
     }
 }

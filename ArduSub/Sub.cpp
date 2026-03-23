@@ -26,7 +26,6 @@ const AP_HAL::HAL& hal = AP_HAL::get_HAL();
  */
 Sub::Sub()
     :
-          _motors(),
           g2(),
 #if AP_SUB_RC_ENABLED
           flight_modes(&g.flight_mode1),
@@ -36,17 +35,11 @@ Sub::Sub()
           auto_yaw_mode(AUTO_YAW_LOOK_AT_NEXT_WP),
           inertial_nav(AP::ahrs()),
           ahrs_view(AP::ahrs(), ROTATION_NONE),
-          attitude_control(ahrs_view, _motors),
-          pos_control(ahrs_view, _motors, attitude_control),
-          wp_nav(ahrs_view, pos_control, attitude_control),
-          loiter_nav(ahrs_view, pos_control, attitude_control),
-          circle_nav(ahrs_view, pos_control),
           param_loader(var_info),
           flightmode(&mode_manual),
           auto_mode(Auto_WP),
           guided_mode(Guided_WP)
 {
-    motors = &_motors;
     failsafe.pilot_input = true;
     if (_singleton != nullptr) {
         AP_HAL::panic("Can only be one Sub");
@@ -178,13 +171,13 @@ void Sub::run_rate_controller()
 {
     const float last_loop_time_s = AP::scheduler().get_last_loop_time_s();
     motors->set_dt_s(last_loop_time_s);
-    attitude_control.set_dt_s(last_loop_time_s);
-    pos_control.set_dt_s(last_loop_time_s);
+    attitude_control->set_dt_s(last_loop_time_s);
+    pos_control->set_dt_s(last_loop_time_s);
 
     //don't run rate controller in manual or motordetection modes
     if (control_mode != Mode::Number::MANUAL && control_mode != Mode::Number::MOTOR_DETECT) {
         // run low level rate controllers that only require IMU data and set loop time
-        attitude_control.rate_controller_run();
+        attitude_control->rate_controller_run();
     }
 }
 
@@ -227,13 +220,13 @@ void Sub::ten_hz_logging_loop()
     // log attitude data if we're not already logging at the higher rate
     if (should_log(MASK_LOG_ATTITUDE_MED) && !should_log(MASK_LOG_ATTITUDE_FAST)) {
         Log_Write_Attitude();
-        attitude_control.Write_ANG();
-        attitude_control.Write_Rate(pos_control);
+        attitude_control->Write_ANG();
+        attitude_control->Write_Rate(*pos_control);
         if (should_log(MASK_LOG_PID)) {
-            logger.Write_PID(LOG_PIDR_MSG, attitude_control.get_rate_roll_pid().get_pid_info());
-            logger.Write_PID(LOG_PIDP_MSG, attitude_control.get_rate_pitch_pid().get_pid_info());
-            logger.Write_PID(LOG_PIDY_MSG, attitude_control.get_rate_yaw_pid().get_pid_info());
-            logger.Write_PID(LOG_PIDA_MSG, pos_control.D_get_accel_pid().get_pid_info());
+            logger.Write_PID(LOG_PIDR_MSG, attitude_control->get_rate_roll_pid().get_pid_info());
+            logger.Write_PID(LOG_PIDP_MSG, attitude_control->get_rate_pitch_pid().get_pid_info());
+            logger.Write_PID(LOG_PIDY_MSG, attitude_control->get_rate_yaw_pid().get_pid_info());
+            logger.Write_PID(LOG_PIDA_MSG, pos_control->D_get_accel_pid().get_pid_info());
         }
     }
     if (should_log(MASK_LOG_MOTBATT)) {
@@ -246,7 +239,7 @@ void Sub::ten_hz_logging_loop()
         logger.Write_RCOUT();
     }
     if (should_log(MASK_LOG_NTUN) && (sub.flightmode->requires_GPS() || sub.flightmode->requires_altitude())) {
-        pos_control.write_log();
+        pos_control->write_log();
     }
     if (should_log(MASK_LOG_IMU) || should_log(MASK_LOG_IMU_FAST) || should_log(MASK_LOG_IMU_RAW)) {
         AP::ins().Write_Vibration();
@@ -264,13 +257,13 @@ void Sub::twentyfive_hz_logging()
 {
     if (should_log(MASK_LOG_ATTITUDE_FAST)) {
         Log_Write_Attitude();
-        attitude_control.Write_ANG();
-        attitude_control.Write_Rate(pos_control);
+        attitude_control->Write_ANG();
+        attitude_control->Write_Rate(*pos_control);
         if (should_log(MASK_LOG_PID)) {
-            logger.Write_PID(LOG_PIDR_MSG, attitude_control.get_rate_roll_pid().get_pid_info());
-            logger.Write_PID(LOG_PIDP_MSG, attitude_control.get_rate_pitch_pid().get_pid_info());
-            logger.Write_PID(LOG_PIDY_MSG, attitude_control.get_rate_yaw_pid().get_pid_info());
-            logger.Write_PID(LOG_PIDA_MSG, pos_control.D_get_accel_pid().get_pid_info());
+            logger.Write_PID(LOG_PIDR_MSG, attitude_control->get_rate_roll_pid().get_pid_info());
+            logger.Write_PID(LOG_PIDP_MSG, attitude_control->get_rate_pitch_pid().get_pid_info());
+            logger.Write_PID(LOG_PIDY_MSG, attitude_control->get_rate_yaw_pid().get_pid_info());
+            logger.Write_PID(LOG_PIDA_MSG, pos_control->D_get_accel_pid().get_pid_info());
         }
     }
 
@@ -342,8 +335,8 @@ void Sub::one_hz_loop()
     // learning to run
     set_likely_flying(hal.util->get_soft_armed());
 
-    attitude_control.set_notch_sample_rate(AP::scheduler().get_filtered_loop_rate_hz());
-    pos_control.D_get_accel_pid().set_notch_sample_rate(AP::scheduler().get_filtered_loop_rate_hz());
+    attitude_control->set_notch_sample_rate(AP::scheduler().get_filtered_loop_rate_hz());
+    pos_control->D_get_accel_pid().set_notch_sample_rate(AP::scheduler().get_filtered_loop_rate_hz());
 }
 
 void Sub::read_AHRS()
@@ -390,7 +383,7 @@ bool Sub::control_check_barometer()
 bool Sub::get_wp_distance_m(float &distance) const
 {
     // see GCS_MAVLINK_Sub::send_nav_controller_output()
-    distance = sub.wp_nav.get_wp_distance_to_destination_cm() * 0.01;
+    distance = sub.wp_nav->get_wp_distance_to_destination_cm() * 0.01;
     return true;
 }
 
@@ -398,7 +391,7 @@ bool Sub::get_wp_distance_m(float &distance) const
 bool Sub::get_wp_bearing_deg(float &bearing) const
 {
     // see GCS_MAVLINK_Sub::send_nav_controller_output()
-    bearing = sub.wp_nav.get_wp_bearing_to_destination_cd() * 0.01;
+    bearing = sub.wp_nav->get_wp_bearing_to_destination_cd() * 0.01;
     return true;
 }
 
