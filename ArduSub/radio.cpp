@@ -51,7 +51,13 @@ void Sub::init_rc_in()
 void Sub::init_rc_out()
 {
     motors->set_update_rate(g.rc_speed);
-    motors->init((AP_Motors::motor_frame_class)g.frame_configuration.get(), AP_Motors::motor_frame_type::MOTOR_FRAME_TYPE_PLUS);
+    AP_Motors::motor_frame_class frame_class = (AP_Motors::motor_frame_class)g.frame_configuration.get();
+#if AP_SCRIPTING_ENABLED
+    if ((AP_Motors6DOF::sub_frame_t)g.frame_configuration.get() == AP_Motors6DOF::SUB_FRAME_6DOF_SCRIPTING) {
+        frame_class = AP_Motors::MOTOR_FRAME_6DOF_SCRIPTING;
+    }
+#endif
+    motors->init(frame_class, AP_Motors::motor_frame_type::MOTOR_FRAME_TYPE_PLUS);
     motors->convert_pwm_min_max_param(channel_throttle->get_radio_min(), channel_throttle->get_radio_max());
     motors->update_throttle_range();
 

@@ -37,6 +37,13 @@ public:
     // if the expected number of motors have been setup then set as initalized
     bool init(uint8_t expected_num_motors) override;
 
+    // ArduSub motor-detect and motor-test interface (same as AP_Motors6DOF)
+    Vector3f get_motor_angular_factors(int motor_number) override;
+    bool motor_is_enabled(int motor_number) override;
+    bool set_reversed(int motor_number, bool reversed) override;
+
+    void set_max_throttle(float max_throttle) override { _max_throttle = max_throttle; }
+
 protected:
     // output - sends commands to the motors
     void output_armed_stabilizing() override;
@@ -58,6 +65,8 @@ protected:
     // Current offset angles, radians
     float _roll_offset;
     float _pitch_offset;
+
+    float _max_throttle = 1.0f;
 
 private:
     static AP_MotorsMatrix_6DoF_Scripting *_singleton;

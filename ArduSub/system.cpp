@@ -1,5 +1,9 @@
 #include "Sub.h"
 
+#if AP_SCRIPTING_ENABLED
+#include <AP_Motors/AP_MotorsMatrix_6DoF_Scripting.h>
+#endif
+
 /*****************************************************************************
 *   The init_ardupilot function processes everything we need for an in - air restart
 *        We will determine later if we are actually on the ground and process a
@@ -290,8 +294,16 @@ AP_Avoidance *AP::ap_avoidance() { return nullptr; }
  */
 void Sub::allocate_motors(void)
 {
-    motors = NEW_NOTHROW AP_Motors6DOF(scheduler.get_loop_rate_hz());
-    motors_var_info = AP_Motors6DOF::var_info;
+#if AP_SCRIPTING_ENABLED
+    if ((AP_Motors6DOF::sub_frame_t)g.frame_configuration.get() == AP_Motors6DOF::SUB_FRAME_6DOF_SCRIPTING) {
+        motors = NEW_NOTHROW AP_MotorsMatrix_6DoF_Scripting(scheduler.get_loop_rate_hz());
+        motors_var_info = AP_MotorsMatrix_6DoF_Scripting::var_info;
+    } else
+#endif
+    {
+        motors = NEW_NOTHROW AP_Motors6DOF(scheduler.get_loop_rate_hz());
+        motors_var_info = AP_Motors6DOF::var_info;
+    }
     if (motors == nullptr) {
         AP_BoardConfig::allocation_error("motors");
     }

@@ -179,6 +179,9 @@ void AP_Motors6DOF::setup_motors(motor_frame_class frame_class, motor_frame_type
         // Put your custom motor setup here
         //break;
 
+    case SUB_FRAME_6DOF_SCRIPTING:
+        // configured by script when AP_SCRIPTING_ENABLED; if using _motors use default layout
+        /* fall through */
     case SUB_FRAME_SIMPLEROV_3:
         _frame_class_string = "SIMPLEROV_3";
         add_motor_raw_6dof(AP_MOTORS_MOT_1,     0,              0,              -1.0f,          0,                  1.0f,               0,              1);

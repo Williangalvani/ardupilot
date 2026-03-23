@@ -80,35 +80,50 @@ void AP_MotorsMatrix_6DoF_Scripting::output_armed_stabilizing()
     float   roll_thrust;                // roll thrust input value, +/- 1.0
     float   pitch_thrust;               // pitch thrust input value, +/- 1.0
     float   yaw_thrust;                 // yaw thrust input value, +/- 1.0
-    float   throttle_thrust;            // throttle thrust input value, 0.0 - 1.0
+    float   throttle_thrust;            // throttle thrust input value, +/- 1.0
     float   forward_thrust;             // forward thrust input value, +/- 1.0
     float   right_thrust;               // right thrust input value, +/- 1.0
 
-    // note that the throttle, forwards and right inputs are not in bodyframe, they are in the frame of the 'normal' 4DoF copter were pretending to be
+    const bool sub_mode = (_active_frame_class == MOTOR_FRAME_6DOF_SCRIPTING);
 
     // apply voltage and air pressure compensation
-    const float compensation_gain = thr_lin.get_compensation_gain(); // compensation for battery voltage and altitude
+    const float compensation_gain = thr_lin.get_compensation_gain();
     roll_thrust = (_roll_in + _roll_in_ff) * compensation_gain;
     pitch_thrust = (_pitch_in + _pitch_in_ff) * compensation_gain;
     yaw_thrust = (_yaw_in + _yaw_in_ff) * compensation_gain;
-    throttle_thrust = get_throttle() * compensation_gain;
 
-    // scale horizontal thrust with throttle, this mimics a normal copter
-    // so we don't break the lean angle proportional acceleration assumption made by the position controller
-    forward_thrust = get_forward() * throttle_thrust;
-    right_thrust = get_lateral() * throttle_thrust;
-
+    if (sub_mode) {
+        // Sub uses bidirectional throttle centered at 0, independent forward/lateral axes
+        throttle_thrust = get_throttle_bidirectional() * compensation_gain;
+        forward_thrust = get_forward() * compensation_gain;
+        right_thrust = get_lateral() * compensation_gain;
+    } else {
+        // Copter uses 0-1 throttle, forward/lateral scaled by throttle
+        throttle_thrust = get_throttle() * compensation_gain;
+        forward_thrust = get_forward() * throttle_thrust;
+        right_thrust = get_lateral() * throttle_thrust;
+    }
 
     // set throttle limit flags
-    if (throttle_thrust <= 0) {
-        throttle_thrust = 0;
-        // we cant thrust down, the vehicle can do it, but it would break a lot of assumptions further up the control stack
-        // 1G decent probably plenty anyway....
-        limit.throttle_lower = true;
-    }
-    if (throttle_thrust >= 1) {
-        throttle_thrust = 1;
-        limit.throttle_upper = true;
+    if (sub_mode) {
+        // only limit surfacing thrust (positive) by _max_throttle, diving is unrestricted
+        if (throttle_thrust <= -1.0f) {
+            throttle_thrust = -1.0f;
+            limit.throttle_lower = true;
+        }
+        if (throttle_thrust >= _max_throttle) {
+            throttle_thrust = _max_throttle;
+            limit.throttle_upper = true;
+        }
+    } else {
+        if (throttle_thrust <= 0) {
+            throttle_thrust = 0;
+            limit.throttle_lower = true;
+        }
+        if (throttle_thrust >= 1) {
+            throttle_thrust = 1;
+            limit.throttle_upper = true;
+        }
     }
 
     // rotate the thrust into bodyframe
@@ -318,6 +333,31 @@ bool AP_MotorsMatrix_6DoF_Scripting::init(uint8_t expected_num_motors) {
             _mav_type = MAV_TYPE_GENERIC;
     }
 
+    return true;
+}
+
+Vector3f AP_MotorsMatrix_6DoF_Scripting::get_motor_angular_factors(int motor_number)
+{
+    if (motor_number < 0 || motor_number >= AP_MOTORS_MAX_NUM_MOTORS) {
+        return Vector3f(0, 0, 0);
+    }
+    return Vector3f(_roll_factor[motor_number], _pitch_factor[motor_number], _yaw_factor[motor_number]);
+}
+
+bool AP_MotorsMatrix_6DoF_Scripting::motor_is_enabled(int motor_number)
+{
+    if (motor_number < 0 || motor_number >= AP_MOTORS_MAX_NUM_MOTORS) {
+        return false;
+    }
+    return motor_enabled[motor_number];
+}
+
+bool AP_MotorsMatrix_6DoF_Scripting::set_reversed(int motor_number, bool reversed)
+{
+    if (motor_number < 0 || motor_number >= AP_MOTORS_MAX_NUM_MOTORS) {
+        return false;
+    }
+    _reversible[motor_number] = reversed;
     return true;
 }
 

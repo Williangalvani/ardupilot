@@ -9,7 +9,7 @@ AP_FLAKE8_CLEAN
 
 import os
 
-from math import degrees
+from math import degrees, radians
 
 from pymavlink import mavextra
 from pymavlink import mavutil
@@ -91,6 +91,184 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
 
     def default_frame(self):
         return 'vectored'
+
+    def Scripting6DoFMotors(self):
+        """Test 6DoF scripting motor matrix on Sub."""
+        self.context_push()
+        self.context_collect('STATUSTEXT')
+
+        self.set_parameters({
+            "FRAME_CONFIG": 8,  # SUB_FRAME_6DOF_SCRIPTING
+            "SCR_ENABLE": 1,
+        })
+
+        self.install_example_script_context("Sub_Motors_6DoF.lua")
+
+        self.reboot_sitl()
+        self.set_rc_default()
+
+        self.wait_statustext("6DoF Sub vectored scripting", timeout=30, check_context=True)
+
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+
+        # verify motor outputs are in the expected bidirectional PWM range
+        # (Sub motors center at 1500 and use the full 1000-2000 range,
+        # unlike Copter which uses 1000-2000 with 1000 as idle.)
+        m = self.assert_receive_message('SERVO_OUTPUT_RAW', timeout=5)
+        for ch in range(1, 7):  # motors 1-6
+            v = getattr(m, "servo%u_raw" % ch)
+            if v < 1000 or v > 2000:
+                raise NotAchievedException("Motor %u PWM %u out of range 1000-2000" % (ch, v))
+
+        # check that vertical motors (5,6) are near center when idle
+        for ch in [5, 6]:
+            v = getattr(m, "servo%u_raw" % ch)
+            self.progress("Motor %u PWM at idle: %u" % (ch, v))
+            if abs(v - 1500) > 100:
+                raise NotAchievedException(
+                    "Motor %u PWM %u not near center at idle" % (ch, v))
+
+        self.change_mode('ALT_HOLD')
+
+        # In Sub's bidirectional convention vertical motors output
+        # >1500 for downward thrust (dive) and <1500 for upward thrust
+        # (surface).  Copter never drives motors below idle, so this
+        # bidirectional output is Sub-specific.
+
+        # dive: wait for vertical motors to drive above center
+        self.set_rc(Joystick.Throttle, 1300)
+
+        self.wait_altitude(altitude_min=-6, altitude_max=-5, timeout=60)
+        self.set_rc(Joystick.Throttle, 1500)
+
+        # let momentum settle before checking hold
+        self.delay_sim_time(3)
+        self.watch_altitude_maintained(timeout=5)
+
+        # surface: wait for vertical motors to drive below center
+        self.set_rc(Joystick.Throttle, 1700)
+
+        self.wait_altitude(altitude_min=-4, altitude_max=-3, timeout=60)
+        self.set_rc(Joystick.Throttle, 1500)
+
+        # settle and hold
+        self.delay_sim_time(3)
+        self.watch_altitude_maintained(timeout=5)
+
+        # navigate to waypoints in GUIDED mode to exercise all motor
+        # axes (forward, lateral, yaw and vertical together)
+        self.change_mode('GUIDED')
+
+        startpos = self.assert_receive_message('GLOBAL_POSITION_INT')
+        start_lat = startpos.lat
+        start_lon = startpos.lon
+
+        def guide_to(lat_ofs, lon_ofs, alt, description):
+            self.progress("Navigating: %s" % description)
+            self.mav.mav.set_position_target_global_int_send(
+                0,
+                self.sysid_thismav(),
+                1,
+                mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT_INT,
+                0b1111111111111000,
+                start_lat + lat_ofs,
+                start_lon + lon_ofs,
+                alt,
+                0, 0, 0,
+                0, 0, 0,
+                0, 0,
+            )
+
+        # ~10 m north and deeper — exercises forward + dive
+        guide_to(int(10 * 1e7 / 111120), 0, -8, "north + dive")
+        self.wait_distance_to_home(8, 100, timeout=60)
+        self.wait_altitude(altitude_min=-9, altitude_max=-7, timeout=30)
+
+        # ~10 m east at same depth — exercises lateral
+        guide_to(int(10 * 1e7 / 111120),
+                 int(10 * 1e7 / 88900),
+                 -8, "northeast hold depth")
+        self.wait_distance_to_home(12, 100, timeout=60)
+
+        # return home and surface — exercises reverse + ascent
+        guide_to(0, 0, -3, "home + surface")
+        self.wait_distance_to_home(0, 5, timeout=60)
+        self.wait_altitude(altitude_min=-4, altitude_max=-2, timeout=30)
+
+        # roll 45 degrees via SET_ATTITUDE_TARGET in ALT_HOLD;
+        # increase attitude controller gains so the controller can
+        # overcome the buoyancy restoring torque at large roll angles
+        self.set_parameters({
+            "ATC_ANG_RLL_P": 12,
+            "ATC_RAT_RLL_P": 0.5,
+            "ATC_RAT_RLL_I": 0.5,
+            "ATC_RAT_RLL_IMAX": 2.0,
+            "ATC_RAT_RLL_PDMX": 2.0,
+        })
+        self.change_mode('ALT_HOLD')
+
+        m = self.assert_receive_message('ATTITUDE', timeout=5)
+        current_yaw_deg = degrees(m.yaw)
+
+        target_roll_deg = 45
+        self.progress("Commanding %d degree roll via SET_ATTITUDE_TARGET" % target_roll_deg)
+        tstart = self.get_sim_time()
+        while True:
+            now = self.get_sim_time_cached()
+            if now - tstart > 25:
+                raise NotAchievedException("Failed to achieve %d degree roll" % target_roll_deg)
+            q = mavextra.euler_to_quat([
+                radians(target_roll_deg),
+                radians(0),
+                radians(current_yaw_deg),
+            ])
+            self.mav.mav.set_attitude_target_send(
+                0,
+                self.sysid_thismav(),
+                1,
+                mavutil.mavlink.ATTITUDE_TARGET_TYPEMASK_THROTTLE_IGNORE,
+                q,
+                0, 0, 0,
+                0,
+            )
+            m = self.assert_receive_message('ATTITUDE', timeout=5)
+            roll_deg = degrees(m.roll)
+            self.progress("Roll: %.1f target: %d" % (roll_deg, target_roll_deg))
+            if abs(roll_deg - target_roll_deg) < 5:
+                self.progress("Achieved target roll of %d degrees" % target_roll_deg)
+                break
+
+        self.progress("Leveling back to 0 roll")
+        tstart = self.get_sim_time()
+        while True:
+            now = self.get_sim_time_cached()
+            if now - tstart > 25:
+                raise NotAchievedException("Failed to level from roll")
+            q = mavextra.euler_to_quat([
+                radians(0),
+                radians(0),
+                radians(current_yaw_deg),
+            ])
+            self.mav.mav.set_attitude_target_send(
+                0,
+                self.sysid_thismav(),
+                1,
+                mavutil.mavlink.ATTITUDE_TARGET_TYPEMASK_THROTTLE_IGNORE,
+                q,
+                0, 0, 0,
+                0,
+            )
+            m = self.assert_receive_message('ATTITUDE', timeout=5)
+            roll_deg = degrees(m.roll)
+            self.progress("Roll: %.1f target: 0" % roll_deg)
+            if abs(roll_deg) < 5:
+                self.progress("Leveled back to 0 roll")
+                break
+
+        self.disarm_vehicle()
+        self.context_pop()
+        self.reboot_sitl()
 
     def WaterDepth(self):
         """Check WATER_DEPTH MAVLink message support for ArduSub"""
@@ -1322,6 +1500,7 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
         ret = super(AutoTestSub, self).tests()
 
         ret.extend([
+            self.Scripting6DoFMotors,
             self.DiveManual,
             self.GCSFailsafe,
             self.ThrottleFailsafe,
