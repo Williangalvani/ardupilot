@@ -75,15 +75,11 @@ protected:
         float moment_of_inertia =  2 * (mass * powf(equivalent_sphere_radius, 2) / 5);
 
         // Frame drag coefficient
-        const Vector3f linear_drag_coefficient = Vector3f(1.4, 1.8, 2.0);
-        // Angular drag coefficient CD for a cube is 1.05. This is subject to change based on experimentation.
-        const Vector3f angular_drag_coefficient = Vector3f(1.05, 1.05, 1.05);
-        // Calculate equivalent sphere area for drag force
-        // $ A = pi * r^2 / 4 $
-        // $ V = 4 * pi * r^3 / 3 $
-        // $ r ^2 = (V * 3 / 4) ^ (2/3) $
-        // A = area (m^3), r = sphere radius (m)
-        float equivalent_sphere_area = M_PI_4 * powf(volume * 3.0f / 4.0f, 2.0f / 3.0f);
+        const Vector3f linear_drag_coefficient = Vector3f(0.751f, 0.965f, 1.073f);
+        // Angular drag coefficient
+        const Vector3f angular_drag_coefficient = Vector3f(0.563f, 0.563f, 0.563f);
+        // Cross-sectional area of equivalent sphere: A = pi * r^2
+        float equivalent_sphere_area = M_PI * powf(equivalent_sphere_radius, 2);
 
     } frame_property;
 
