@@ -106,8 +106,7 @@ void Submarine::calculate_forces(const struct sitl_input &input, Vector3f &rot_a
     // Add forces in body frame accel
     body_accel -= linear_drag_forces / frame_property.weight;
 
-    // Calculate angular drag forces
-    // TODO: This results in the wrong units. Fix the math.
+    // Calculate angular drag torque
     Vector3f angular_drag_torque;
     calculate_angular_drag_torque(gyro, frame_property.angular_drag_coefficient, angular_drag_torque);
 
@@ -176,33 +175,35 @@ void Submarine::calculate_drag_force(const Vector3f &velocity, const Vector3f &d
 }
 
 /**
- * @brief Calculate angular drag torque using the equivalente sphere area and assuming a laminar external flow.
+ * @brief Calculate angular drag torque using a simplified single-point model.
  *
- *  $F_D = C_D*A*\rho*V^2/2$
- * where:
- *      $F_D$ is the drag force
- *      $C_D$ is the drag coefficient
- *      $A$ is the surface area in contact with the fluid
- *      $/rho$ is the fluid density (1000kg/m³ for water)
- *      $V$ is the fluid velocity velocity relative to the surface
+ * Models the sphere as a single representative surface patch at radius r.
+ * The surface velocity from angular rate is v = omega * r, giving a
+ * drag force F_D = C_D * A * rho * v^2 / 2 and torque = F_D * r.
+ * Expanding: torque = C_D * A * rho * omega^2 * r^3 / 2
  *
- * @param angular_velocity Body frame velocity of fluid
- * @param drag_coefficient Rotational drag coefficient of body
+ * This is an approximation — a full surface integral yields a torque
+ * proportional to r^5 with no separate area term. The empirical C_D
+ * absorbs the difference.
+ *
+ * @param angular_velocity Body frame angular velocity (rad/s)
+ * @param drag_coefficient Empirical rotational drag coefficient
+ * @param torque Output torque vector
  */
 void Submarine::calculate_angular_drag_torque(const Vector3f &angular_velocity, const Vector3f &drag_coefficient, Vector3f &torque) const
 {
-     /**
-     * @brief It's necessary to keep the velocity orientation from the body frame.
-     *     To do so, a mathematical artifice is used to do velocity square but without loosing the direction.
-     *  $(|V|/V)*V^2$ = $|V|*V$
-     */
-    Vector3f v_2(
+    const Vector3f v_2(
         fabsf(angular_velocity.x) * angular_velocity.x,
         fabsf(angular_velocity.y) * angular_velocity.y,
         fabsf(angular_velocity.z) * angular_velocity.z
     );
-    Vector3f f_d = v_2 *= drag_coefficient * frame_property.equivalent_sphere_area * 1000 / 2;
-    torque = f_d * frame_property.equivalent_sphere_radius;
+    const float scale = frame_property.equivalent_sphere_area * water_density / 2.0f;
+    const Vector3f f_d{
+        v_2.x * drag_coefficient.x * scale,
+        v_2.y * drag_coefficient.y * scale,
+        v_2.z * drag_coefficient.z * scale
+    };
+    torque = f_d * powf(frame_property.equivalent_sphere_radius, 3);
 }
 
 

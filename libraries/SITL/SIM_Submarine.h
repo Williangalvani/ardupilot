@@ -77,7 +77,7 @@ protected:
         // Frame drag coefficient
         const Vector3f linear_drag_coefficient = Vector3f(0.751f, 0.965f, 1.073f);
         // Angular drag coefficient
-        const Vector3f angular_drag_coefficient = Vector3f(0.563f, 0.563f, 0.563f);
+        const Vector3f angular_drag_coefficient = Vector3f(13.75f, 13.75f, 13.75f);
         // Cross-sectional area of equivalent sphere: A = pi * r^2
         float equivalent_sphere_area = M_PI * powf(equivalent_sphere_radius, 2);
 
