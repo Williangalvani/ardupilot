@@ -129,9 +129,10 @@ void Submarine::calculate_forces(const struct sitl_input &input, Vector3f &rot_a
 void Submarine::calculate_buoyancy_torque(Vector3f &torque)
 {
     // Let's assume 2 Liters water displacement at the top, and ~ 2kg of weight at the bottom.
-    const Vector3f force_up(0,0,-40); // 40 N upwards
-    const Vector3f force_position = dcm.transposed() * Vector3f(0, 0, 0.15); // offset in meters
-    torque = force_position % force_up;
+    const Vector3f buoyancy_force_ef(0, 0, -40); // 40 N upwards in earth frame
+    const Vector3f buoyancy_force_bf = dcm.transposed() * buoyancy_force_ef;
+    const Vector3f foam_offset_bf(0, 0, -0.15); // foam 15cm above CG in body frame
+    torque = foam_offset_bf % buoyancy_force_bf;
 }
 
 
