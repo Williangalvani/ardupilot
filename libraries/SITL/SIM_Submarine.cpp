@@ -90,7 +90,7 @@ void Submarine::calculate_forces(const struct sitl_input &input, Vector3f &rot_a
         }
 
         float thrust = output * fabs(output) * frame_property.thrust; // approximate pwm to thrust function using a quadratic curve
-        body_accel += t.linear * thrust / frame_property.weight;
+        body_accel += t.linear * thrust / frame_property.mass;
         rot_accel += t.rotational * thrust * frame_property.thruster_mount_radius / frame_property.moment_of_inertia;
     }
 
@@ -104,7 +104,7 @@ void Submarine::calculate_forces(const struct sitl_input &input, Vector3f &rot_a
     Vector3f linear_drag_forces;
     calculate_drag_force(velocity_air_bf, frame_property.linear_drag_coefficient, linear_drag_forces);
     // Add forces in body frame accel
-    body_accel -= linear_drag_forces / frame_property.weight;
+    body_accel -= linear_drag_forces / frame_property.mass;
 
     // Calculate angular drag torque
     Vector3f angular_drag_torque;
@@ -223,11 +223,11 @@ float Submarine::calculate_buoyancy_acceleration()
 
     // Completely below water level
     if (below_water_level > frame_property.height/2) {
-        return GRAVITY_MSS + sitl->buoyancy / frame_property.mass;
+        return GRAVITY_MSS + sitl->buoyancy / frame_property.equivalent_sphere_mass;
     }
 
     // bouyant force is proportional to fraction of height in water
-    return GRAVITY_MSS + (sitl->buoyancy * below_water_level/frame_property.height) / frame_property.mass;
+    return GRAVITY_MSS + (sitl->buoyancy * below_water_level/frame_property.height) / frame_property.equivalent_sphere_mass;
 };
 
 /*
