@@ -45,6 +45,9 @@ public:
     // Map thrust input -1~1 to pwm output 1100~1900
     int16_t calc_thrust_to_pwm(float thrust_in) const;
 
+    // Compensate thrust input -1~1 for asymmetric forward/reverse thrust
+    float compensate_for_thrust_asymmetry(float thrust_in) const;
+
     // output_to_motors - sends minimum values out to the motors
     void output_to_motors() override;
 
@@ -88,6 +91,8 @@ protected:
     // Parameters
     AP_Int8             _motor_reverse[AP_MOTORS_MAX_NUM_MOTORS];
     AP_Float            _forwardVerticalCouplingFactor;
+    // Non-positive values are treated identically to 1.0
+    AP_Float            _thrust_asymmetry;
 
     float               _forward_factor[AP_MOTORS_MAX_NUM_MOTORS]; // each motors contribution to forward/backward
     float               _lateral_factor[AP_MOTORS_MAX_NUM_MOTORS];  // each motors contribution to lateral (left/right)
