@@ -609,6 +609,7 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
 
     def DiveManual(self):
         '''Dive manual'''
+        raise NotAchievedException("DELIBERATE TEST FAILURE FOR SUMMARY TESTING")
         self.wait_ready_to_arm()
         self.arm_vehicle()
 
