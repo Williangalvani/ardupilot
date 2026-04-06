@@ -15495,6 +15495,58 @@ SERIAL5_BAUD 128
             self.InitialMode,
         ]
 
+    def print_summary(self, results, skip_list):
+        """Print a summary table of all test results with timing."""
+        if not results and not skip_list:
+            return
+
+        separator = "=" * 78
+        thin_sep = "-" * 78
+
+        print("")
+        print(separator)
+        print("  %-6s  %-30s  %-28s %s" % ("Result", "Test", "Description", "Duration"))
+        print(separator)
+
+        total_time = 0.0
+        n_passed = 0
+        n_failed = 0
+        n_skipped = len(skip_list)
+
+        for result in results:
+            if isinstance(result, ValgrindFailedResult):
+                n_failed += 1
+                print("  %-6s  %-30s  %-28s" % ("FAIL", "Valgrind", "Memory error detected"))
+                continue
+            elapsed = result.time_elapsed
+            total_time += elapsed
+            name = result.test.name
+            desc = (result.test.description or "")[:28]
+            if result.passed:
+                n_passed += 1
+                tag = "PASS"
+            else:
+                n_failed += 1
+                tag = "FAIL"
+            print("  %-6s  %-30s  %-28s %7.1fs" % (tag, name, desc, elapsed))
+
+        for (test, reason) in skip_list:
+            name = test.name
+            desc = (reason or "")[:28]
+            print("  %-6s  %-30s  %-28s       -" % ("SKIP", name, desc))
+
+        print(thin_sep)
+        summary_parts = []
+        if n_passed:
+            summary_parts.append("%d passed" % n_passed)
+        if n_failed:
+            summary_parts.append("%d failed" % n_failed)
+        if n_skipped:
+            summary_parts.append("%d skipped" % n_skipped)
+        print("  Total: %-59s %7.1fs" % (", ".join(summary_parts), total_time))
+        print(separator)
+        print("")
+
     def post_tests_announcements(self):
         if self._show_test_timings:
             if self.waiting_to_arm_count == 0:
@@ -15545,12 +15597,15 @@ SERIAL5_BAUD 128
                 print("  %s (see %s)" % (test.name, reason))
 
         self.fail_list = list(filter(lambda x : not x.passed, results))
+        self.all_results = results
+        self.all_skip_list = skip_list
         if len(self.fail_list):
             self.progress("Failing tests:")
             for failure in self.fail_list:
                 print(str(failure))
 
         self.post_tests_announcements()
+        self.print_summary(results, skip_list)
         if self.generate_junit:
             if step_name is None:
                 step_name = "Unknown_step_name"

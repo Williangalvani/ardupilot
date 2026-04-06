@@ -706,6 +706,60 @@ def write_fullresults():
     write_webresults(results)
 
 
+def print_step_summary(all_testinstances):
+    """Print a consolidated summary across all test steps."""
+    from vehicle_test_suite import ValgrindFailedResult
+    separator = "=" * 78
+    thin_sep = "-" * 78
+
+    print("")
+    print(separator)
+    print("  Consolidated Test Summary")
+    print(separator)
+
+    total_time = 0.0
+    n_passed = 0
+    n_failed = 0
+    n_skipped = 0
+
+    for step, instances in all_testinstances.items():
+        print("  Step: %s" % step)
+        print("  " + thin_sep[2:])
+        for inst in instances:
+            for result in getattr(inst, 'all_results', []):
+                if isinstance(result, ValgrindFailedResult):
+                    n_failed += 1
+                    print("    %-6s  %-30s  %-24s" % ("FAIL", "Valgrind", "Memory error detected"))
+                    continue
+                elapsed = result.time_elapsed
+                total_time += elapsed
+                name = result.test.name
+                desc = (result.test.description or "")[:24]
+                if result.passed:
+                    n_passed += 1
+                    tag = "PASS"
+                else:
+                    n_failed += 1
+                    tag = "FAIL"
+                print("    %-6s  %-30s  %-24s %7.1fs" % (tag, name, desc, elapsed))
+            for (test, reason) in getattr(inst, 'all_skip_list', []):
+                n_skipped += 1
+                print("    %-6s  %-30s  %-24s       -" % ("SKIP", test.name, (reason or "")[:24]))
+        print("")
+
+    print(thin_sep)
+    summary_parts = []
+    if n_passed:
+        summary_parts.append("%d passed" % n_passed)
+    if n_failed:
+        summary_parts.append("%d failed" % n_failed)
+    if n_skipped:
+        summary_parts.append("%d skipped" % n_skipped)
+    print("  Total: %-59s %7.1fs" % (", ".join(summary_parts), total_time))
+    print(separator)
+    print("")
+
+
 def run_tests(steps):
     """Run a list of steps."""
 
@@ -727,6 +781,7 @@ def run_tests(steps):
     passed = True
     failed = []
     failed_testinstances = dict()
+    all_testinstances = dict()
     for step in steps:
         util.pexpect_close_all()
 
@@ -737,6 +792,10 @@ def run_tests(steps):
             testinstance = None
             if isinstance(success, tuple):
                 (success, testinstance) = success
+            if testinstance is not None:
+                if all_testinstances.get(step) is None:
+                    all_testinstances[step] = []
+                all_testinstances[step].append(testinstance)
             if success:
                 results.add(step, '<span class="passed-text">PASSED</span>',
                             time.time() - t1)
@@ -779,6 +838,9 @@ def run_tests(steps):
                     print("  " + str(failure))
 
         print("FAILED %u tests: %s" % (len(failed), failed))
+
+    if len(all_testinstances) > 1:
+        print_step_summary(all_testinstances)
 
     util.pexpect_close_all()
 
