@@ -682,6 +682,49 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
 
         self.progress("Surface mission OK")
 
+    def SurfaceAltHoldAuto(self):
+        """Detect vertical thruster spike switching from ALT_HOLD at surface to AUTO
+
+        With GPS altitude offset misaligned home, ALT_HOLD at the surface could
+        wind up the position target while max-throttle limiting masked thrust.
+        Switching to AUTO reset max throttle and caused a vertical thruster spike.
+        """
+        mission_items = [
+            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 30, 0, 0),
+            (mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH, 0, 0, 0),
+        ]
+
+        self.start_subtest("ALT_HOLD at surface then AUTO with SIM_GPS1_ALT_OFS=-10")
+        self.context_push()
+        self.set_parameter("SIM_GPS1_ALT_OFS", -10)
+        self.set_parameter("SIM_GPS1_DRFTALT", 5)
+        self.set_parameter("EK3_SRC1_POSZ", 1)  # Baro
+        self.reboot_sitl()
+        self.set_rc_default()
+        self.upload_simple_relhome_mission(mission_items)
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+
+        try:
+            self.change_mode('ALT_HOLD')
+            self.set_rc(Joystick.Throttle, 1500)
+            self.wait_altitude(altitude_min=-0.5, altitude_max=0.5, relative=True, timeout=30)
+
+            # Hold at the surface with neutral throttle so a position target windup
+            # can develop before the mode switch.
+            self.delay_sim_time(10)
+
+            self.context_set_message_rate_hz('SERVO_OUTPUT_RAW', self.sitl_streamrate())
+            self.watch_vertical_thruster_usage(max_usage=0.5, timeout=5)
+
+            self.change_mode('AUTO')
+            self.watch_vertical_thruster_usage(max_usage=0.5, timeout=30)
+        finally:
+            self.disarm_vehicle(force=True)
+        self.context_pop()
+
+        self.progress("Surface ALT_HOLD to AUTO transition OK")
+
     def GripperMission(self):
         '''Test gripper mission items'''
         self.load_mission("sub-gripper-mission.txt")
@@ -1385,6 +1428,7 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
             self.MAV_mgs,
             self.DiveMission,
             self.SurfaceMission,
+            self.SurfaceAltHoldAuto,
             self.GripperMission,
             self.DoubleCircle,
             self.MotorThrustHoverParameterIgnore,
