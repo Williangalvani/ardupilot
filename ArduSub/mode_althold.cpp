@@ -109,18 +109,22 @@ void ModeAlthold::control_depth() {
     float target_climb_rate_cms = sub.get_pilot_desired_climb_rate(channel_throttle->get_control_in());
     target_climb_rate_cms = constrain_float(target_climb_rate_cms, -sub.get_pilot_speed_dn(), g.pilot_speed_up);
 
-    // desired_climb_rate returns 0 when within the deadzone.
-    //we allow full control to the pilot, but as soon as there's no input, we handle being at surface/bottom
-    if (fabsf(target_climb_rate_cms) < 0.05f)  {
-        if (sub.ap.at_surface) {
-            position_control->set_pos_desired_U_cm(position_control->get_pos_estimate_U_m() * 100.0f);
-        } else if (sub.ap.at_bottom) {
-            position_control->set_pos_desired_U_cm(MAX(position_control->get_pos_estimate_U_m() * 100.0f + 10.0f, position_control->get_pos_desired_U_cm())); // set target to 10 cm above bottom
+    // at or above the surface depth threshold; use position as well as the surfaced
+    // flag so this still applies while the pilot is commanding upward thrust
+    const bool at_or_above_surface = sub.ap.at_surface ||
+        (position_control->get_pos_estimate_U_m() * 100.0f >= g.surface_depth - 5.0f);
+
+    if (at_or_above_surface) {
+        target_climb_rate_cms = MIN(target_climb_rate_cms, 0.0f);
+    } else if (fabsf(target_climb_rate_cms) < 0.05f)  {
+        if (sub.ap.at_bottom) {
+            position_control->set_pos_desired_U_cm(MAX(position_control->get_pos_estimate_U_m() * 100 + 10.0f, position_control->get_pos_desired_U_cm())); // set target to 10 cm above bottom
         }
     }
 
     position_control->D_set_pos_target_from_climb_rate_cms(target_climb_rate_cms);
-    if (sub.ap.at_surface && fabsf(target_climb_rate_cms) < 0.05f) {
+    if (at_or_above_surface) {
+        position_control->set_pos_desired_U_cm(position_control->get_pos_estimate_U_m() * 100.0f);
         sub.handle_surface_pos_offset();
     }
     position_control->D_update_controller();
