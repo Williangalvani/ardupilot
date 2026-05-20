@@ -469,6 +469,7 @@ private:
     void read_inertia();
     void update_surface_and_bottom_detector();
     void set_surfaced(bool at_surface);
+    void handle_surface_pos_offset();
     void set_bottomed(bool at_bottom);
     void motors_output();
     void init_rc_in();

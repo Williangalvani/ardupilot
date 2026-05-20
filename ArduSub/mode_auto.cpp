@@ -331,6 +331,9 @@ void ModeAuto::auto_loiter_run()
     motors.set_forward(forward_out);
 
     // WP_Nav has set the vertical position control targets
+    if (sub.ap.at_surface) {
+        sub.handle_surface_pos_offset();
+    }
     // run the vertical position controller and set output throttle
     position_control->D_update_controller();
 

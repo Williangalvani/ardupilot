@@ -142,6 +142,13 @@ void Sub::exit_mode(Mode::Number old_control_mode, Mode::Number new_control_mode
         camera_mount.set_mode_to_default();
 #endif  // HAL_MOUNT_ENABLED
     }
+
+    // surface z offset is mode-specific; clear when leaving ALT_HOLD
+    if (old_control_mode == Mode::Number::ALT_HOLD) {
+        pos_control.set_posvelaccel_offset_target_D_m(0.0f, 0.0f, 0.0f);
+        pos_control.set_pos_offset_D_m(0.0f);
+    }
+
     motors.set_max_throttle(1.0f);
 }
 

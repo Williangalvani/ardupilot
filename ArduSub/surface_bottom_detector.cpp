@@ -96,6 +96,18 @@ void Sub::set_surfaced(bool at_surface)
     }
 }
 
+// Align the vertical position target with the current estimate using a z offset.
+// pos_target = pos_desired + pos_offset + pos_terrain, so choose pos_offset to
+// keep pos_target at the current estimate without changing pos_desired.
+void Sub::handle_surface_pos_offset()
+{
+    const float pos_offset_d_m = pos_control.get_pos_estimate_NED_m().z
+        - pos_control.get_pos_desired_NED_m().z
+        - pos_control.get_pos_terrain_D_m();
+    pos_control.set_posvelaccel_offset_target_D_m(pos_offset_d_m, 0.0f, 0.0f);
+    pos_control.set_pos_offset_D_m(pos_offset_d_m);
+}
+
 void Sub::set_bottomed(bool at_bottom)
 {
 

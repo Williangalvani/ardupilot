@@ -106,12 +106,6 @@ void ModeAlthold::run_post()
 }
 
 void ModeAlthold::control_depth() {
-    // return 0.2f when at the surface to p
-    // scale linearly between 0.2f and 1.0f as we approach the surface
-    float distance_to_surface = (g.surface_depth - position_control->get_pos_estimate_U_m() * 100.0f) * 0.01f;
-    distance_to_surface = constrain_float(distance_to_surface, 0.0f, 1.0f);
-    motors.set_max_throttle(g.surface_max_throttle + (1.0f - g.surface_max_throttle) * distance_to_surface);
-
     float target_climb_rate_cms = sub.get_pilot_desired_climb_rate(channel_throttle->get_control_in());
     target_climb_rate_cms = constrain_float(target_climb_rate_cms, -sub.get_pilot_speed_dn(), g.pilot_speed_up);
 
@@ -119,12 +113,15 @@ void ModeAlthold::control_depth() {
     //we allow full control to the pilot, but as soon as there's no input, we handle being at surface/bottom
     if (fabsf(target_climb_rate_cms) < 0.05f)  {
         if (sub.ap.at_surface) {
-            position_control->set_pos_desired_U_cm(MIN(position_control->get_pos_desired_U_cm(), g.surface_depth)); // set target to 5 cm below surface level
+            position_control->set_pos_desired_U_cm(position_control->get_pos_estimate_U_m() * 100.0f);
         } else if (sub.ap.at_bottom) {
             position_control->set_pos_desired_U_cm(MAX(position_control->get_pos_estimate_U_m() * 100.0f + 10.0f, position_control->get_pos_desired_U_cm())); // set target to 10 cm above bottom
         }
     }
 
     position_control->D_set_pos_target_from_climb_rate_cms(target_climb_rate_cms);
+    if (sub.ap.at_surface && fabsf(target_climb_rate_cms) < 0.05f) {
+        sub.handle_surface_pos_offset();
+    }
     position_control->D_update_controller();
 }
