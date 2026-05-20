@@ -17,16 +17,30 @@ bool Sub::set_home_to_current_location(bool lock)
 {
     // get current location from EKF
     Location temp_loc;
-    if (ahrs.get_location(temp_loc)) {
-
-        // Make home always at the water's surface.
-        // This allows disarming and arming again at depth.
-        // This also ensures that mission items with relative altitude frame, are always
-        // relative to the water's surface, whether in a high elevation lake, or at sea level.
-        temp_loc.offset_up_m(-barometer.get_altitude());
-        return set_home(temp_loc, lock);
+    if (!ahrs.get_location(temp_loc)) {
+        return false;
     }
-    return false;
+
+    Location ekf_origin;
+    if (!ahrs.get_origin(ekf_origin)) {
+        return false;
+    }
+
+    // Make home always at the water's surface.
+    // This allows disarming and arming again at depth.
+    // This also ensures that mission items with relative altitude frame, are always
+    // relative to the water's surface, whether in a high elevation lake, or at sea level.
+    // Use the EKF vertical datum rather than GPS AMSL from get_location().
+    postype_t posD;
+    if (ahrs.get_relative_position_D_origin(posD)) {
+        temp_loc.set_alt_cm(
+            ekf_origin.alt - posD * 100.0 + barometer.get_altitude() * 100.0,
+            Location::AltFrame::ABSOLUTE);
+    } else {
+        temp_loc.offset_up_m(barometer.get_altitude());
+    }
+
+    return set_home(temp_loc, lock);
 }
 
 // set_home - sets ahrs home (used for RTL) to specified location
