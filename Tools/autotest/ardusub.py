@@ -134,6 +134,24 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
     def is_sub(self):
         return True
 
+    def watch_vertical_thruster_usage(self, max_usage=0.5, timeout=30):
+        """Fail if vertical thrusters exceed max_usage while receiving SERVO_OUTPUT_RAW only."""
+        self.context_set_message_rate_hz('SERVO_OUTPUT_RAW', self.sitl_streamrate())
+        pwm_min = self.get_parameter("MOT_PWM_MIN")
+        pwm_max = self.get_parameter("MOT_PWM_MAX")
+        pwm_trim = (pwm_min + pwm_max) // 2
+        half_range = max(pwm_trim - pwm_min, pwm_max - pwm_trim)
+        tstart = self.get_sim_time()
+        while self.get_sim_time_cached() < tstart + timeout:
+            m = self.assert_receive_message('SERVO_OUTPUT_RAW')
+            for chan in [5, 6]:
+                pwm = getattr(m, "servo%u_raw" % chan)
+                usage = abs(pwm - pwm_trim) / float(half_range)
+                if usage > max_usage:
+                    raise NotAchievedException(
+                        "Vertical thruster servo%d usage %.1f%% exceeds %.1f%% (pwm=%u trim=%u)" %
+                        (chan, usage * 100, max_usage * 100, pwm, pwm_trim))
+
     def watch_altitude_maintained(self, delta=0.3, timeout=5.0):
         """Watch and wait for the actual altitude to be maintained
 
@@ -636,6 +654,33 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
         self.disarm_vehicle()
 
         self.progress("Mission OK")
+
+    def SurfaceMission(self):
+        """Run a surface mission with various GPS altitude offsets"""
+        mission_items = [
+            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 30, 0, 0),
+            (mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH, 0, 0, 0),
+        ]
+
+        for alt_ofs in [-10, 0, 10]:
+            self.start_subtest("Surface mission with SIM_GPS1_ALT_OFS=%d" % alt_ofs)
+            self.context_push()
+            self.set_parameter("SIM_GPS1_ALT_OFS", alt_ofs)
+            self.set_parameter("SIM_GPS1_DRFTALT", 5)
+            self.set_parameter("EK3_SRC1_POSZ", 1) # Baro
+            self.reboot_sitl()
+            self.set_rc_default()
+            self.upload_simple_relhome_mission(mission_items)
+            self.wait_ready_to_arm()
+            self.arm_vehicle()
+            try:
+                self.change_mode('AUTO')
+                self.watch_vertical_thruster_usage(max_usage=0.5, timeout=30)
+            finally:
+                self.disarm_vehicle(force=True)
+            self.context_pop()
+
+        self.progress("Surface mission OK")
 
     def GripperMission(self):
         '''Test gripper mission items'''
@@ -1339,6 +1384,7 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
             self.ModeChanges,
             self.MAV_mgs,
             self.DiveMission,
+            self.SurfaceMission,
             self.GripperMission,
             self.DoubleCircle,
             self.MotorThrustHoverParameterIgnore,
