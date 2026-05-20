@@ -725,6 +725,45 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
 
         self.progress("Surface ALT_HOLD to AUTO transition OK")
 
+    def AltHoldSurfaceUpInput(self):
+        """In ALT_HOLD, upward pilot input at the surface must not climb above it"""
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.change_mode('ALT_HOLD')
+        self.set_rc(Joystick.Throttle, 1500)
+        self.wait_altitude(altitude_min=-0.5, altitude_max=0.5, relative=True, timeout=30)
+        self.context_set_message_rate_hz('SERVO_OUTPUT_RAW', self.sitl_streamrate())
+        self.delay_sim_time(2)
+
+        pwm_min = self.get_parameter("MOT_PWM_MIN")
+        pwm_max = self.get_parameter("MOT_PWM_MAX")
+        pwm_trim = (pwm_min + pwm_max) // 2
+        half_range = max(pwm_trim - pwm_min, pwm_max - pwm_trim)
+        start_alt = self.get_altitude(relative=True)
+        max_alt_m = start_alt + 0.2
+
+        self.set_rc(Joystick.Throttle, 1900)
+        tstart = self.get_sim_time()
+        while self.get_sim_time_cached() < tstart + 10:
+            vfr = self.mav.recv_match(type='VFR_HUD', blocking=False)
+            if vfr is not None and vfr.alt > max_alt_m:
+                raise NotAchievedException(
+                    "ROV climbed above surface limit: alt=%.2fm max=%.2fm" %
+                    (vfr.alt, max_alt_m))
+            m = self.mav.recv_match(type='SERVO_OUTPUT_RAW', blocking=False)
+            if m is not None:
+                for chan in [5, 6]:
+                    pwm = getattr(m, "servo%u_raw" % chan)
+                    usage = abs(pwm - pwm_trim) / float(half_range)
+                    if usage > 0.5:
+                        raise NotAchievedException(
+                            "Vertical thruster servo%d usage %.1f%% exceeds 50.0%% (pwm=%u trim=%u)" %
+                            (chan, usage * 100, pwm, pwm_trim))
+
+        self.set_rc(Joystick.Throttle, 1500)
+        self.disarm_vehicle()
+        self.progress("ALT_HOLD surface up-input limit OK")
+
     def GripperMission(self):
         '''Test gripper mission items'''
         self.load_mission("sub-gripper-mission.txt")
@@ -1419,6 +1458,7 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
             self.GCSFailsafe,
             self.ThrottleFailsafe,
             self.AltitudeHold,
+            self.AltHoldSurfaceUpInput,
             self.Surftrak,
             self.SimTerrainSurftrak,
             self.SimTerrainMission,
