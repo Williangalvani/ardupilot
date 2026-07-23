@@ -1384,6 +1384,268 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
 
         self.disarm_vehicle()
 
+    def _setup_set_home_scenario(self, gps_err, mission=False):
+        """Bring up SITL for the DO_SET_HOME / surface-reference tests.
+
+        Baro drives the EKF vertical channel and gps_err (m) of AMSL error is
+        injected into the origin; the vehicle settles at the surface and we
+        confirm the error is present in the absolute channel (so callers are not
+        vacuous). mission=True also enables GPS horizontal aiding and a slow WP
+        speed for AUTO missions. Returns (sim_surface, gpi, surface_amsl).
+        """
+        params = {
+            "EK3_SRC1_POSZ": 1,        # Baro drives the vertical channel
+            "EK3_SRC1_VELZ": 0,        # None
+            "GPS1_TYPE": 1,
+            "SIM_GPS1_ENABLE": 1,
+            "SIM_GPS1_ALT_OFS": gps_err,   # inject the GPS altitude error
+            "SIM_GPS1_DRFTALT": 0,
+        }
+        if mission:
+            params.update({
+                "EK3_SRC1_POSXY": 3,   # GPS for horizontal navigation
+                "EK3_SRC1_VELXY": 3,   # GPS
+                "WP_SPD": 0.5,         # slow, so each leg spans the observation
+            })
+        self.set_parameters(params)
+        self.reboot_sitl()
+        # EKF origin and the auto home are established from the biased GPS fix.
+        self.wait_ready_to_arm()
+
+        self.context_set_message_rate_hz(mavutil.mavlink.MAVLINK_MSG_ID_SIM_STATE, 10)
+        self.context_set_message_rate_hz(mavutil.mavlink.MAVLINK_MSG_ID_GLOBAL_POSITION_INT, 10)
+
+        self.delay_sim_time(3, reason="EKF to settle at the surface")
+
+        # The vehicle sits at the true surface; capture it and confirm the GPS
+        # altitude error is present in the absolute channel.
+        sim_surface = self.assert_receive_message('SIM_STATE').alt
+        gpi = self.assert_receive_message('GLOBAL_POSITION_INT')
+        surface_amsl = gpi.alt * 1.0e-3
+        abs_alt_error = abs(surface_amsl - sim_surface)
+        self.progress("surface truth (SIM_STATE.alt)=%.2fm, absolute alt error=%.2fm" %
+                      (sim_surface, abs_alt_error))
+        if abs_alt_error < gps_err / 2.0:
+            raise NotAchievedException(
+                "GPS altitude error not present in the absolute channel (%.2fm); "
+                "test not exercising the fault" % abs_alt_error)
+        return sim_surface, gpi, surface_amsl
+
+    def _set_home_surface_relative(self, gpi, rel_alt, surface_amsl, accuracy=0.5):
+        """DO_SET_HOME at rel_alt metres relative to the surface, then verify.
+
+        rel_alt is up-positive (0 = surface, negative = below). Confirms home
+        lands -rel_alt metres below the current surface despite the GPS error,
+        and returns that measured depth.
+        """
+        self.progress("Sending DO_SET_HOME at %+.0fm relative to the surface" % rel_alt)
+        self.run_cmd_int(
+            mavutil.mavlink.MAV_CMD_DO_SET_HOME,
+            p1=0,          # use the specified location (not current)
+            p5=gpi.lat,
+            p6=gpi.lon,
+            p7=rel_alt,
+            frame=mavutil.mavlink.MAV_FRAME_GLOBAL_INT,
+        )
+        home_alt = self.poll_home_position().altitude * 1.0e-3
+        depth_of_home = surface_amsl - home_alt
+        expected_depth = -rel_alt
+        self.progress("home is %.2fm below the surface (home_alt=%.2fm surface=%.2fm)" %
+                      (depth_of_home, home_alt, surface_amsl))
+        if abs(depth_of_home - expected_depth) > accuracy:
+            raise NotAchievedException(
+                "home not placed %.2fm below the surface (got %.2fm below); ArduSub must "
+                "anchor home to the water surface" % (expected_depth, depth_of_home))
+        return depth_of_home
+
+    def DepthReportingImmuneToSetHome(self):
+        """Reported depth must stay correct after a GCS DO_SET_HOME at alt 0.
+
+        Regression test for an ArduSub 4.7.0 field failure: with the baro as the
+        EKF vertical source the origin sits at a non-zero AMSL (GPS altitude
+        error), and a topside sends DO_SET_HOME at alt 0 (its idea of the
+        surface). ArduSub anchors home to the surface, so relative_alt must stay
+        ~0 while the vehicle sits motionless at the surface; before the fix it
+        jumped by the origin/home mismatch.
+        """
+        gps_alt_offset = 10  # constant GPS AMSL error, mirroring the field log
+        accuracy = 0.5
+
+        sim_ref, gpi, surface_amsl = self._setup_set_home_scenario(gps_alt_offset)
+
+        # At the surface the true depth is ~0, so relative_alt must read ~0 - not
+        # the GPS-biased absolute altitude.
+        rel_ref = gpi.relative_alt * 0.001
+        self.progress("surface reference: relative_alt=%.2fm SIM alt=%.2fm" % (rel_ref, sim_ref))
+        if abs(rel_ref - sim_ref) > accuracy:
+            raise NotAchievedException(
+                "relative_alt should report the true surface depth (%.2fm) but read %.2fm; "
+                "GPS altitude error leaked into the reported depth" % (sim_ref, rel_ref))
+
+        # Emulate a topside/companion setting home to "the surface" at alt 0.
+        # ArduSub must keep home at the water surface rather than 0m AMSL.
+        self._set_home_surface_relative(gpi, 0, surface_amsl, accuracy)
+
+        self.delay_sim_time(2, reason="reported depth to update after DO_SET_HOME")
+
+        # The vehicle never moved and home stayed at the surface, so the reported
+        # depth (relative_alt) must stay put at the surface.
+        tstart = self.get_sim_time()
+        max_rel_error = 0.0
+        while self.get_sim_time_cached() - tstart < 10:
+            gpi = self.assert_receive_message('GLOBAL_POSITION_INT')
+            sim = self.assert_receive_message('SIM_STATE')
+            max_rel_error = max(max_rel_error, abs(gpi.relative_alt * 0.001 - rel_ref))
+            # Sanity: the vehicle really is holding still at the surface, so any
+            # change in reported depth is attributable to DO_SET_HOME alone.
+            if abs(sim.alt - sim_ref) > accuracy:
+                raise NotAchievedException(
+                    "vehicle moved during the test (SIM alt %.2fm -> %.2fm); "
+                    "cannot attribute depth change to DO_SET_HOME" % (sim_ref, sim.alt))
+        self.progress("after DO_SET_HOME: relative_alt change %.2fm" % max_rel_error)
+
+        if max_rel_error > accuracy:
+            raise NotAchievedException(
+                "relative_alt (reported depth) jumped %.2fm after a DO_SET_HOME at alt 0 "
+                "while the vehicle sat motionless at the surface: the ~%dm origin/home AMSL "
+                "mismatch leaked into the reported depth" % (max_rel_error, gps_alt_offset))
+
+    def SurfaceMissionAfterSetHomeZero(self):
+        """A surface mission must stay at the surface after a DO_SET_HOME at alt 0.
+
+        With a GPS altitude error in the origin, a topside sends DO_SET_HOME at
+        alt 0. Without the fix this locks home ~gps_err below the origin, so a
+        "surface" waypoint (0m relative to home) resolves below the true surface
+        and the vehicle dives. ArduSub anchors home to the surface, so it must
+        stay at the surface throughout (verified against SIM_STATE truth).
+        """
+        gps_err = 10          # GPS AMSL error, present before home is set
+        surface_band = 1.0    # allowed deviation from the true surface (m)
+
+        sim_surface, gpi, surface_amsl = self._setup_set_home_scenario(gps_err, mission=True)
+
+        # Topside sets home to "the surface" at altitude 0 (locks home). ArduSub
+        # must anchor home to the water surface, not 0m AMSL below the biased origin.
+        self._set_home_surface_relative(gpi, 0, surface_amsl)
+
+        # A surface mission: every waypoint at 0m relative to home.
+        self.upload_simple_relhome_mission([
+            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 15, 0, 0),
+            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 15, 15, 0),
+            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 0, 15, 0),
+            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 0, 0, 0),
+        ])
+
+        self.set_rc_default()
+        self.arm_vehicle()
+        self.change_mode('AUTO')
+        self.wait_current_waypoint(1, timeout=30)
+
+        # Watch the simulator truth: the vehicle must stay at the surface.
+        tstart = self.get_sim_time()
+        max_dev = 0.0
+        while self.get_sim_time_cached() - tstart < 30:
+            sim = self.assert_receive_message('SIM_STATE')
+            max_dev = max(max_dev, abs(sim.alt - sim_surface))
+        self.progress("max surface deviation while running the surface mission: %.2fm" % max_dev)
+
+        self.change_mode('MANUAL')
+        self.disarm_vehicle()
+
+        if max_dev > surface_band:
+            raise NotAchievedException(
+                "vehicle left the surface by %.2fm running a surface mission after a "
+                "DO_SET_HOME at alt 0: the ~%dm origin/home AMSL mismatch made a "
+                "0m-relative-to-home waypoint resolve below the true surface" %
+                (max_dev, gps_err))
+
+    def UnderwaterMissionFromUnderwaterHome(self):
+        """A relative-altitude mission from an underwater home resolves to true depth.
+
+        Home is set deliberately below the surface (a permanent underwater
+        deployment) and an AUTO mission drives to waypoints relative to it. With
+        the baro as the EKF vertical source and a GPS altitude error in the
+        origin, the true depth (verified against SIM_STATE) must be
+        home_depth + waypoint_offset below the surface - the GPS error must not
+        leak in.
+
+        Also covers the static case: right after the underwater home is set (still
+        at the surface), relative_alt must read ~+home_depth.
+        """
+        gps_err = 10          # GPS AMSL error in the EKF origin
+        home_depth = 5        # underwater home depth below the surface (m)
+        wp_below_home = 3     # how far the deep waypoint sits below home (m)
+        accuracy = 0.75       # depth tolerance, allows for AUTO depth-hold overshoot (m)
+
+        sim_surface, gpi, surface_amsl = self._setup_set_home_scenario(gps_err, mission=True)
+
+        # Set a deliberate underwater home home_depth below the surface.
+        depth_of_home = self._set_home_surface_relative(gpi, -home_depth, surface_amsl, accuracy)
+
+        # Static check: the vehicle still floats at the surface, home_depth above
+        # the new underwater home, so relative_alt must read ~+home_depth.
+        self.delay_sim_time(2, reason="reported depth to update after DO_SET_HOME")
+        gpi = self.assert_receive_message('GLOBAL_POSITION_INT')
+        sim = self.assert_receive_message('SIM_STATE')
+        rel = gpi.relative_alt * 1.0e-3
+        self.progress("at surface with underwater home: relative_alt=%.2fm SIM alt=%.2fm" %
+                      (rel, sim.alt))
+        if abs(rel - home_depth) > accuracy:
+            raise NotAchievedException(
+                "relative_alt should be ~+%dm (vehicle above the underwater home) but is %.2fm" %
+                (home_depth, rel))
+
+        # Mission relative to the underwater home: a waypoint at the home depth
+        # (0m relative) then one wp_below_home deeper. The NAV_WAYPOINT hold time
+        # lets the sub settle at each depth. Altitude is up-positive, negative = deeper.
+        self.upload_simple_relhome_mission([
+            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 15, 0, 0, {'p1': 20}),
+            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 15, 15, -wp_below_home, {'p1': 20}),
+        ])
+
+        self.set_rc_default()
+        self.arm_vehicle()
+        self.change_mode('AUTO')
+
+        def verify_leg(target_rel, description):
+            """Wait for the sub to hold at target_rel (relative to home), check the
+            true depth against SIM_STATE, and return the observed GPS abs-alt error."""
+            expected_depth = depth_of_home - target_rel   # metres below the surface
+            # NAV_WAYPOINT hold time lets the sub settle at the commanded depth.
+            self.wait_altitude(target_rel - 0.6, target_rel + 0.6,
+                               relative=True, minimum_duration=6, timeout=260)
+            sim = self.assert_receive_message('SIM_STATE')
+            gpi = self.assert_receive_message('GLOBAL_POSITION_INT')
+            rel = gpi.relative_alt * 1.0e-3
+            true_depth = sim_surface - sim.alt
+            gps_leak = abs(gpi.alt * 1.0e-3 - sim.alt)
+            self.progress("%s: relative_alt=%.2fm true depth=%.2fm (expected %.2fm), GPS abs error=%.2fm" %
+                          (description, rel, true_depth, expected_depth, gps_leak))
+            # Reported home-referenced depth must match the truth: no GPS-error leak.
+            if abs(true_depth - (depth_of_home - rel)) > 0.6:
+                raise NotAchievedException(
+                    "%s: reported depth (relative_alt %.2fm) disagrees with the true depth "
+                    "(%.2fm below the surface)" % (description, rel, true_depth))
+            # The mission must have driven the sub to ~the commanded depth.
+            if abs(true_depth - expected_depth) > 1.5:
+                raise NotAchievedException(
+                    "%s resolved to %.2fm below the surface, expected %.2fm: GPS altitude "
+                    "error leaked into a relative-to-home mission depth" %
+                    (description, true_depth, expected_depth))
+            return gps_leak
+
+        leak1 = verify_leg(0, "home-depth waypoint (0m relative to home)")
+        leak2 = verify_leg(-wp_below_home, "deep waypoint (%dm below home)" % wp_below_home)
+
+        self.change_mode('MANUAL')
+        self.disarm_vehicle()
+
+        # Confirm the GPS error was present throughout, otherwise the checks are vacuous.
+        if min(leak1, leak2) < gps_err / 2.0:
+            raise NotAchievedException(
+                "GPS altitude error not present during the mission (%.2fm); "
+                "test not exercising the fault" % min(leak1, leak2))
+
     def GuidedWP(self):
         """Test Guided_WP mode"""
 
@@ -1718,6 +1980,9 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
             self.GuidedWP,
             self.AutoTerrainRecover,
             self.IgnoreGPSDrift,
+            self.DepthReportingImmuneToSetHome,
+            self.SurfaceMissionAfterSetHomeZero,
+            self.UnderwaterMissionFromUnderwaterHome,
         ])
 
         return ret
