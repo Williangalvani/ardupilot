@@ -18,12 +18,11 @@ bool Sub::set_home_to_current_location(bool lock)
     // get current location from EKF
     Location temp_loc;
     if (ahrs.get_location(temp_loc)) {
-
-        // Make home always at the water's surface.
-        // This allows disarming and arming again at depth.
-        // This also ensures that mission items with relative altitude frame, are always
-        // relative to the water's surface, whether in a high elevation lake, or at sea level.
-        temp_loc.offset_up_m(-barometer.get_altitude());
+        // Home at the current horizontal location, on the surface (alt 0,
+        // surface-relative; set_home() anchors it). Lets the vehicle disarm and
+        // re-arm at depth and keeps relative-altitude mission items referenced
+        // to the surface, in a high lake or at sea level alike.
+        temp_loc.set_alt_cm(0, Location::AltFrame::ABSOLUTE);
         return set_home(temp_loc, lock);
     }
     return false;
@@ -39,8 +38,20 @@ bool Sub::set_home(const Location& loc, bool lock)
         return false;
     }
 
+    // ArduSub home altitude is relative to the water surface (0 = surface,
+    // negative = below), not raw AMSL. Anchoring it to the baro-derived surface
+    // keeps the reported depth and relative-altitude mission/RTL targets correct
+    // despite the GPS altitude error in the EKF origin.
+    Location home = loc;
+    Location surface;
+    if (ahrs.get_location(surface)) {
+        // surface plus the commanded surface-relative altitude, above the vehicle
+        surface.offset_up_m(-barometer.get_altitude() + loc.alt * 0.01f);
+        home.set_alt_cm(surface.alt, surface.get_alt_frame());
+    }
+
     // set ahrs home (used for RTL)
-    if (!ahrs.set_home(loc)) {
+    if (!ahrs.set_home(home)) {
         return false;
     }
 
