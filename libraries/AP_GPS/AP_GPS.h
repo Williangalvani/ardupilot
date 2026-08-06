@@ -138,6 +138,7 @@ public:
 #if GPS_MOVING_BASELINE
         MovingBase mb_params;
 #endif // GPS_MOVING_BASELINE
+        AP_Int32 bus_id;
 
         static const struct AP_Param::GroupInfo var_info[];
     };
@@ -573,6 +574,9 @@ public:
     GPS_Type get_type(uint8_t instance) const {
         return instance>=ARRAY_SIZE(params) ? GPS_Type::GPS_TYPE_NONE : params[instance].type;
     }
+
+    // return SERIALn index for a UART GPS instance, or -1 if not found
+    int8_t get_serial_port_number(uint8_t instance) const;
 
     // get iTOW, if supported, zero otherwie
     uint32_t get_itow(uint8_t instance) const;

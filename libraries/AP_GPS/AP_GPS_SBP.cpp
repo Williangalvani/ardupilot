@@ -55,6 +55,7 @@ AP_GPS_SBP::AP_GPS_SBP(AP_GPS &_gps,
 
     Debug("SBP Driver Initialized");
 
+    set_uart_bus_id(DevType::SBP);
     parser_state.state = sbp_parser_state_t::WAITING;
 
     //Externally visible state

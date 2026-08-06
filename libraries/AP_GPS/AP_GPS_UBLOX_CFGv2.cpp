@@ -289,6 +289,7 @@ bool AP_GPS_UBLOX_CFGv2::_identify_module()
         } else {
             module = Module::UNKNOWN;
         }
+        ubx_backend.update_dev_id();
     }
 
     // check protocol version

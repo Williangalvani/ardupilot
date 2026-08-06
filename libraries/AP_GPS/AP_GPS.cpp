@@ -307,6 +307,21 @@ bool AP_GPS::needs_uart(GPS_Type type) const
     return true;
 }
 
+// return SERIALn index for a UART GPS instance, or -1 if not found
+int8_t AP_GPS::get_serial_port_number(uint8_t instance) const
+{
+    if (instance >= ARRAY_SIZE(_port) || !needs_uart(params[instance].type)) {
+        return -1;
+    }
+    uint8_t uart_idx = 0;
+    for (uint8_t i = 0; i < instance; i++) {
+        if (needs_uart(params[i].type)) {
+            uart_idx++;
+        }
+    }
+    return AP::serialmanager().find_portnum(AP_SerialManager::SerialProtocol_GPS, uart_idx);
+}
+
 /// Startup initialisation.
 void AP_GPS::init()
 {

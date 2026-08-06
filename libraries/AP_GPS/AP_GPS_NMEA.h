@@ -55,7 +55,11 @@ class AP_GPS_NMEA : public AP_GPS_Backend
 
 public:
 
-    using AP_GPS_Backend::AP_GPS_Backend;
+    AP_GPS_NMEA(AP_GPS &_gps, AP_GPS::Params &_params, AP_GPS::GPS_State &_state, AP_HAL::UARTDriver *_port) :
+        AP_GPS_Backend(_gps, _params, _state, _port)
+    {
+        set_uart_bus_id(DevType::NMEA);
+    }
 
     /// Checks the serial receive buffer for characters,
     /// attempts to parse NMEA data and updates internal state

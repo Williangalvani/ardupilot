@@ -22,6 +22,8 @@
 
 #include <AP_HAL/AP_HAL.h>
 
+#include <AP_HAL/Device.h>
+
 #include "AP_GPS_DroneCAN.h"
 
 #include <AP_CANManager/AP_CANManager.h>
@@ -169,6 +171,11 @@ AP_GPS_Backend* AP_GPS_DroneCAN::probe(AP_GPS &_gps, AP_GPS::GPS_State &_state)
         backend->_detected_module = found_match;
         snprintf(backend->_name, ARRAY_SIZE(backend->_name), "DroneCAN%u-%u", _detected_modules[found_match].ap_dronecan->get_driver_index()+1, _detected_modules[found_match].node_id);
         _detected_modules[found_match].instance = _state.instance;
+        backend->set_bus_id(AP_HAL::Device::make_bus_id(
+                                AP_HAL::Device::BUS_TYPE_UAVCAN,
+                                _detected_modules[found_match].ap_dronecan->get_driver_index(),
+                                _detected_modules[found_match].node_id,
+                                uint8_t(DevType::UAVCAN)));
         for (uint8_t i=0; i < GPS_MAX_RECEIVERS; i++) {
             if (_detected_modules[found_match].node_id == AP::gps().params[i].node_id) {
                 if (i == _state.instance) {

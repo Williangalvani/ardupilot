@@ -46,6 +46,7 @@ AP_GPS_NOVA::AP_GPS_NOVA(AP_GPS &_gps,
                          AP_HAL::UARTDriver *_port) :
     AP_GPS_Backend(_gps, _params, _state, _port)
 {
+    set_uart_bus_id(DevType::NOVA);
     nova_msg.nova_state = nova_msg_parser::PREAMBLE1;
 
     nova_msg.header.data[0] = NOVA_PREAMBLE1;

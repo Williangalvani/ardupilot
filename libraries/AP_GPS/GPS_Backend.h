@@ -121,6 +121,43 @@ public:
     static void BCD_to_gps_time(uint32_t bcd_date, uint32_t bcd_time_ms, uint16_t& gps_week, uint32_t& gps_time_ms);
 
 protected:
+    enum class DevType : uint8_t {
+        UBLOX       = 0x01, // generic u-blox until model identified
+        UBLOX_5     = 0x02,
+        UBLOX_6     = 0x03,
+        UBLOX_7     = 0x04,
+        UBLOX_M8    = 0x05,
+        UBLOX_M8N   = 0x06,
+        UBLOX_M9    = 0x07,
+        UBLOX_M9N   = 0x08,
+        UBLOX_F9    = 0x09,
+        UBLOX_F9_ZED = 0x0A, // ZED-F9P
+        UBLOX_F9_NEO = 0x0B, // NEO-F9P
+        UBLOX_M10   = 0x0C,
+        UBLOX_F10   = 0x0D,
+        UBLOX_F20   = 0x0E,
+        UBLOX_X20   = 0x0F,
+        NMEA        = 0x20,
+        SIRF        = 0x21,
+        SBP         = 0x22,
+        SBP2        = 0x23,
+        ERB         = 0x24,
+        SBF         = 0x25,
+        GSOF        = 0x26,
+        NOVA        = 0x27,
+        MAV         = 0x28,
+        MSP         = 0x29,
+        EXTERNAL_AHRS = 0x2A,
+        UAVCAN      = 0x2B,
+        SITL        = 0x2C,
+    };
+
+    // set bus ID of this instance, for GPSn_DEV_ID parameters
+    void set_bus_id(uint32_t id);
+
+    // set DEV_ID for a UART GPS using SERIALn index and driver type
+    void set_uart_bus_id(DevType dtype);
+
     AP_HAL::UARTDriver *port;           ///< UART we are attached to
     AP_GPS &gps;                        ///< access to frontend (for parameters)
     AP_GPS::GPS_State &state;           ///< public state for this instance

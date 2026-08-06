@@ -19,6 +19,7 @@
 
 #include "AP_GPS.h"
 #include "GPS_Backend.h"
+#include <AP_HAL/Device.h>
 #include <AP_Logger/AP_Logger.h>
 #include <time.h>
 #include <AP_Common/time.h>
@@ -50,6 +51,21 @@ AP_GPS_Backend::AP_GPS_Backend(AP_GPS &_gps, AP_GPS::Params &_params, AP_GPS::GP
     state.have_speed_accuracy = false;
     state.have_horizontal_accuracy = false;
     state.have_vertical_accuracy = false;
+}
+
+void AP_GPS_Backend::set_bus_id(uint32_t id)
+{
+    params.bus_id.set_and_save(int32_t(id));
+}
+
+void AP_GPS_Backend::set_uart_bus_id(DevType dtype)
+{
+    const int8_t portnum = gps.get_serial_port_number(state.instance);
+    set_bus_id(AP_HAL::Device::make_bus_id(
+                   AP_HAL::Device::BUS_TYPE_SERIAL,
+                   portnum < 0 ? 0 : uint8_t(portnum),
+                   0,
+                   uint8_t(dtype)));
 }
 
 /*

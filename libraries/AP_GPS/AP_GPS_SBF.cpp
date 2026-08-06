@@ -64,6 +64,7 @@ AP_GPS_SBF::AP_GPS_SBF(AP_GPS &_gps,
                        AP_HAL::UARTDriver *_port) :
     AP_GPS_Backend(_gps, _params, _state, _port)
 {
+    set_uart_bus_id(DevType::SBF);
     sbf_msg.sbf_state = sbf_msg_parser_t::PREAMBLE1;
 
     _config_last_ack_time = AP_HAL::millis();

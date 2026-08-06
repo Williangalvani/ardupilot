@@ -24,6 +24,7 @@
 #if AP_GPS_MAV_ENABLED
 
 #include <AP_HAL/AP_HAL_Boards.h>
+#include <AP_HAL/Device.h>
 
 #include "AP_GPS.h"
 #include "GPS_Backend.h"
@@ -31,7 +32,15 @@
 class AP_GPS_MAV : public AP_GPS_Backend {
 public:
 
-    using AP_GPS_Backend::AP_GPS_Backend;
+    AP_GPS_MAV(AP_GPS &_gps, AP_GPS::Params &_params, AP_GPS::GPS_State &_state, AP_HAL::UARTDriver *_port) :
+        AP_GPS_Backend(_gps, _params, _state, _port)
+    {
+        set_bus_id(AP_HAL::Device::make_bus_id(
+                       AP_HAL::Device::BUS_TYPE_UNKNOWN,
+                       0,
+                       state.instance,
+                       uint8_t(DevType::MAV)));
+    }
 
     bool read() override;
 

@@ -113,6 +113,13 @@ const AP_Param::GroupInfo AP_GPS::Params::var_info[] = {
     AP_GROUPINFO("CAN_OVRIDE", 9, AP_GPS::Params, override_node_id, 0),
 #endif
 
+    // @Param: DEV_ID
+    // @DisplayName: GPS ID
+    // @Description: GPS ID, taking into account its type, bus and instance
+    // @ReadOnly: True
+    // @User: Advanced
+    AP_GROUPINFO_FLAGS("DEV_ID", 10, AP_GPS::Params, bus_id, 0, AP_PARAM_FLAG_INTERNAL_USE_ONLY),
+
     AP_GROUPEND
 };
 

@@ -68,6 +68,7 @@ AP_GPS_SBP2::AP_GPS_SBP2(AP_GPS &_gps,
     AP_GPS_Backend(_gps, _params, _state, _port)
 {
     Debug("SBP Driver Initialized");
+    set_uart_bus_id(DevType::SBP2);
     parser_state.state = sbp_parser_state_t::WAITING;
 }
 

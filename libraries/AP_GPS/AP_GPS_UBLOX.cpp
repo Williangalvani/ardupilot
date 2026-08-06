@@ -128,6 +128,9 @@ AP_GPS_UBLOX::AP_GPS_UBLOX(AP_GPS &_gps,
     // start the process of updating the GPS rates
     _request_next_config();
 
+    // provisional DEV_ID until MON_VER identifies the module
+    set_uart_bus_id(DevType::UBLOX);
+
 #if CONFIGURE_PPS_PIN
     _unconfigured_messages |= CONFIG_TP5;
 #endif
@@ -1477,6 +1480,7 @@ AP_GPS_UBLOX::_parse_gps(void)
                     _unconfigured_messages |= CONFIG_L5;
                 }
             }
+            update_dev_id();
             break;
         }
         default:
@@ -1836,6 +1840,7 @@ AP_GPS_UBLOX::_parse_gps(void)
         _unconfigured_messages &= ~CONFIG_VERSION;
         /* We don't need that anymore */
         _configure_message_rate(CLASS_NAV, MSG_NAV_SVINFO, 0);
+        update_dev_id();
         break;
         }
     default:
@@ -2444,6 +2449,88 @@ bool AP_GPS_UBLOX::supports_F9_config(void) const
 bool AP_GPS_UBLOX::is_gnss_key(ConfigKey key) const
 {
     return (unsigned(key) & 0xFFFF0000) == 0x10310000;
+}
+
+// update GPSn_DEV_ID from MON_VER module string and/or hardware generation
+void AP_GPS_UBLOX::update_dev_id(void)
+{
+    DevType dtype = DevType::UBLOX;
+
+    // Prefer the MOD= string from MON_VER when present (e.g. NEO-M8N, ZED-F9P)
+    if (_module[0] != 0) {
+        // more specific matches first
+        if (strstr(_module, "ZED-F9") != nullptr) {
+            dtype = DevType::UBLOX_F9_ZED;
+        } else if (strstr(_module, "NEO-F9") != nullptr) {
+            dtype = DevType::UBLOX_F9_NEO;
+        } else if (strstr(_module, "M8N") != nullptr) {
+            dtype = DevType::UBLOX_M8N;
+        } else if (strstr(_module, "M9N") != nullptr) {
+            dtype = DevType::UBLOX_M9N;
+        } else if (strstr(_module, "M8") != nullptr) {
+            dtype = DevType::UBLOX_M8;
+        } else if (strstr(_module, "M9") != nullptr) {
+            dtype = DevType::UBLOX_M9;
+        } else if (strstr(_module, "M10") != nullptr) {
+            dtype = DevType::UBLOX_M10;
+        } else if (strstr(_module, "F10") != nullptr) {
+            dtype = DevType::UBLOX_F10;
+        } else if (strstr(_module, "F20") != nullptr) {
+            dtype = DevType::UBLOX_F20;
+        } else if (strstr(_module, "X20") != nullptr) {
+            dtype = DevType::UBLOX_X20;
+        } else if (strstr(_module, "F9") != nullptr) {
+            dtype = DevType::UBLOX_F9;
+        }
+    }
+
+    // Fall back to hardware generation when module string did not resolve
+    if (dtype == DevType::UBLOX) {
+        switch (_hardware_generation) {
+        case UBLOX_5:
+            dtype = DevType::UBLOX_5;
+            break;
+        case UBLOX_6:
+            dtype = DevType::UBLOX_6;
+            break;
+        case UBLOX_7:
+            dtype = DevType::UBLOX_7;
+            break;
+        case UBLOX_M8:
+            dtype = DevType::UBLOX_M8;
+            break;
+        case UBLOX_M9:
+            dtype = DevType::UBLOX_M9;
+            break;
+        case UBLOX_F9:
+            if (_hardware_variant == UBLOX_F9_ZED) {
+                dtype = DevType::UBLOX_F9_ZED;
+            } else if (_hardware_variant == UBLOX_F9_NEO) {
+                dtype = DevType::UBLOX_F9_NEO;
+            } else {
+                dtype = DevType::UBLOX_F9;
+            }
+            break;
+        case UBLOX_M10:
+            dtype = DevType::UBLOX_M10;
+            break;
+#if AP_GPS_UBLOX_CFGV2_ENABLED
+        case UBLOX_F10:
+            dtype = DevType::UBLOX_F10;
+            break;
+        case UBLOX_F20:
+            dtype = DevType::UBLOX_F20;
+            break;
+        case UBLOX_X20:
+            dtype = DevType::UBLOX_X20;
+            break;
+#endif
+        default:
+            break;
+        }
+    }
+
+    set_uart_bus_id(dtype);
 }
 
 #endif

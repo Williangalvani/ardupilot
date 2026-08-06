@@ -20,6 +20,7 @@
 
 #include <AP_Common/AP_Common.h>
 #include <AP_HAL/AP_HAL.h>
+#include <AP_HAL/Device.h>
 
 #include "AP_GPS.h"
 #include "GPS_Backend.h"
@@ -30,7 +31,15 @@ class AP_GPS_MSP : public AP_GPS_Backend
 {
 public:
 
-    using AP_GPS_Backend::AP_GPS_Backend;
+    AP_GPS_MSP(AP_GPS &_gps, AP_GPS::Params &_params, AP_GPS::GPS_State &_state, AP_HAL::UARTDriver *_port) :
+        AP_GPS_Backend(_gps, _params, _state, _port)
+    {
+        set_bus_id(AP_HAL::Device::make_bus_id(
+                       AP_HAL::Device::BUS_TYPE_MSP,
+                       0,
+                       state.instance,
+                       uint8_t(DevType::MSP)));
+    }
 
     bool read() override;
     void handle_msp(const MSP::msp_gps_data_message_t &pkt) override;

@@ -941,6 +941,9 @@ private:
     uint8_t populate_F9_gnss(void);
     uint8_t last_configured_gnss;
 
+    // update GPSn_DEV_ID from identified module / hardware generation
+    void update_dev_id(void);
+
     uint8_t _pps_freq = 1;
 #ifdef HAL_GPIO_PPS
     void pps_interrupt(uint8_t pin, bool high, uint32_t timestamp_us);
