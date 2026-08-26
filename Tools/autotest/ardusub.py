@@ -1392,7 +1392,10 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
 
         self.wait_ready_to_arm()
         self.arm_vehicle()
+
+        self.dive(-10)
         self.change_mode('ALT_HOLD')
+        self.delay_sim_time(2, reason="allow alt hold to settle")
 
         type_mask = (
             mavutil.mavlink.ATTITUDE_TARGET_TYPEMASK_BODY_ROLL_RATE_IGNORE |
@@ -1401,8 +1404,11 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
             mavutil.mavlink.ATTITUDE_TARGET_TYPEMASK_THROTTLE_IGNORE
         )
 
+        depth_delta = 0.5
+
         def command_and_wait_roll(target_deg, timeout=30, hold_seconds=2):
             target_quat = mavextra.euler_to_quat([radians(target_deg), 0, 0])
+            reference_depth = [None]
 
             def cf(value, _target):
                 self.mav.mav.set_attitude_target_send(
@@ -1413,6 +1419,20 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
                     0, 0, 0,  # (ignored) attitude rate targets
                     0.5  # thrust
                 )
+                roll_error = abs((value - _target + 180) % 360 - 180)
+                if roll_error > 5:
+                    return
+                m = self.assert_receive_message('VFR_HUD')
+                if reference_depth[0] is None:
+                    reference_depth[0] = m.alt
+                    self.progress('Depth to maintain at roll %d: %.2f' %
+                                  (target_deg, reference_depth[0]))
+                    return
+                if abs(m.alt - reference_depth[0]) > depth_delta:
+                    raise NotAchievedException(
+                        "Depth not maintained at roll %d: want %.2f (+/- %.2f) got=%.2f" %
+                        (target_deg, reference_depth[0], depth_delta, m.alt))
+
             self.wait_roll(
                 target_deg,
                 accuracy=5,
