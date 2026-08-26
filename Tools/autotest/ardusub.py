@@ -1382,7 +1382,7 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
             raise NotAchievedException("UAS_ID_AVAILABLE flag not set")
 
     def UpsideDown(self):
-        """Test roll authority and attitude control of vectored_6dof frame via SET_ATTITUDE_TARGET."""
+        """Test roll and pitch authority and attitude control of vectored_6dof frame via SET_ATTITUDE_TARGET."""
         model = "vectored_6dof"
         self.customise_SITL_commandline(
             [],
@@ -1405,12 +1405,16 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
         )
 
         depth_delta = 0.5
+        reference_depth = self.assert_receive_message('VFR_HUD').alt
+        self.progress(f'Depth to maintain: {reference_depth:.2f}')
 
-        def command_and_wait_roll(target_deg, timeout=30, hold_seconds=2):
-            target_quat = mavextra.euler_to_quat([radians(target_deg), 0, 0])
-            reference_depth = [None]
+        def wrap_180(angle):
+            return (angle + 180) % 360 - 180
 
-            def cf(value, _target):
+        def command_and_wait(roll_deg, pitch_deg, timeout=30, hold_seconds=2):
+            target_quat = mavextra.euler_to_quat([radians(roll_deg), radians(pitch_deg), 0])
+
+            def get_att_error():
                 self.mav.mav.set_attitude_target_send(
                     0,  # timestamp
                     self.sysid_thismav(), 1,  # target IDs
@@ -1419,35 +1423,48 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
                     0, 0, 0,  # (ignored) attitude rate targets
                     0.5  # thrust
                 )
-                roll_error = abs((value - _target + 180) % 360 - 180)
-                if roll_error > 5:
-                    return
+                att = self.assert_receive_message('ATTITUDE')
+                roll_err = abs(wrap_180(degrees(att.roll) - roll_deg))
+                pitch_err = abs(wrap_180(degrees(att.pitch) - pitch_deg))
                 m = self.assert_receive_message('VFR_HUD')
-                if reference_depth[0] is None:
-                    reference_depth[0] = m.alt
-                    self.progress('Depth to maintain at roll %d: %.2f' %
-                                  (target_deg, reference_depth[0]))
-                    return
-                if abs(m.alt - reference_depth[0]) > depth_delta:
+                if abs(m.alt - reference_depth) > depth_delta:
                     raise NotAchievedException(
-                        "Depth not maintained at roll %d: want %.2f (+/- %.2f) got=%.2f" %
-                        (target_deg, reference_depth[0], depth_delta, m.alt))
+                        f"Depth not maintained at roll {roll_deg} pitch {pitch_deg}: "
+                        f"want {reference_depth:.2f} (+/- {depth_delta:.2f}) got={m.alt:.2f}")
+                return max(roll_err, pitch_err)
 
-            self.wait_roll(
-                target_deg,
+            self.wait_and_maintain(
+                value_name=f"attitude roll={roll_deg} pitch={pitch_deg}",
+                target=0,
+                current_value_getter=get_att_error,
                 accuracy=5,
                 timeout=timeout,
-                absolute_value=True,
                 minimum_duration=hold_seconds,
-                called_function=cf,
             )
 
         for roll_deg in [45, 90, 120, 180]:
             self.start_subtest(f"Roll {roll_deg} degrees")
-            command_and_wait_roll(roll_deg)
+            command_and_wait(roll_deg, 0)
 
-            self.start_subtest(f"Return to level from {roll_deg} degrees")
-            command_and_wait_roll(0)
+            self.start_subtest(f"Return to level from roll {roll_deg} degrees")
+            command_and_wait(0, 0)
+
+        # an Euler pitch saturates at 90, so these stop short of vertical and are
+        # run in both directions instead of carrying on over the top
+        for pitch_deg in [45, -45, 70, -70]:
+            self.start_subtest(f"Pitch {pitch_deg} degrees")
+            command_and_wait(0, pitch_deg)
+
+            self.start_subtest(f"Return to level from pitch {pitch_deg} degrees")
+            command_and_wait(0, 0)
+
+        # combined attitudes, where 321 vs 312 Euler reconstructions disagree
+        for roll_deg, pitch_deg in [(45, 45), (90, 20), (180, 20)]:
+            self.start_subtest(f"Roll {roll_deg} pitch {pitch_deg} degrees")
+            command_and_wait(roll_deg, pitch_deg)
+
+            self.start_subtest(f"Return to level from roll {roll_deg} pitch {pitch_deg} degrees")
+            command_and_wait(0, 0)
 
         self.disarm_vehicle()
 
