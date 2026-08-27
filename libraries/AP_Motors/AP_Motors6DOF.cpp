@@ -209,6 +209,58 @@ void AP_Motors6DOF::add_motor_raw_6dof(int8_t motor_num, float roll_fac, float p
     _lateral_factor[motor_num] = lat_fac;
 }
 
+// cap upwards throttle in the demand's native frame, then distribute the linear
+// demands across the body axes. SURFACE_MAX_THR limits earth up when the
+// throttle demand is earth frame, and body up otherwise
+void AP_Motors6DOF::limit_and_rotate_linear_demands(float &throttle, float &forward, float &lateral)
+{
+    if (throttle <= -_throttle_thrust_max) {
+        throttle = -_throttle_thrust_max;
+        if (!_earth_frame_throttle) {
+            limit.throttle_lower = true;
+        }
+    }
+    if (throttle >= _throttle_thrust_max) {
+        throttle = _throttle_thrust_max;
+        if (!_earth_frame_throttle) {
+            limit.throttle_upper = true;
+        }
+    }
+
+    // cap the demand while it still points along its own frame's up
+    throttle = apply_max_throttle(throttle);
+
+    linear_demands_to_body(throttle, forward, lateral);
+}
+
+// distribute the linear demands across the body axes. Demands are forward,
+// right and up. Forward and lateral are always body frame. The throttle demand
+// is body up unless the earth frame flag is set, in which case it is earth up
+// and is spread across all three body axes along _up_body. _up_body is fixed by
+// gravity alone, so no heading is involved and the mapping is continuous at
+// every attitude
+void AP_Motors6DOF::linear_demands_to_body(float &throttle, float &forward, float &lateral) const
+{
+    if (_earth_frame_throttle) {
+        forward += throttle * _up_body.x;
+        lateral += throttle * _up_body.y;
+        throttle = -throttle * _up_body.z;
+    }
+}
+
+// record motor saturation for the depth controller, whose demand is no longer
+// carried by the throttle axis alone once it has been distributed
+void AP_Motors6DOF::note_motor_saturation(float mixed)
+{
+    if (!_earth_frame_throttle) {
+        return;
+    }
+    if (mixed > 1.0f || mixed < -1.0f) {
+        limit.throttle_upper = true;
+        limit.throttle_lower = true;
+    }
+}
+
 // output_min - sends minimum values out to the motors
 void AP_Motors6DOF::output_min()
 {
@@ -294,27 +346,16 @@ void AP_Motors6DOF::output_armed_stabilizing()
     const float pitch_thrust = _pitch_in + _pitch_in_ff;
     const float yaw_thrust = _yaw_in + _yaw_in_ff;
     float throttle_thrust = get_throttle_bidirectional();
-    const float forward_thrust = _forward_in;
-    const float lateral_thrust = _lateral_in;
+    float forward_thrust = _forward_in;
+    float lateral_thrust = _lateral_in;
 
     // initialize limits flags
     limit.set_all(false);
 
-    // constrain throttle to +/- _throttle_thrust_max
-    if (throttle_thrust <= -_throttle_thrust_max) {
-        throttle_thrust = -_throttle_thrust_max;
-        limit.throttle_lower = true;
-    }
-    if (throttle_thrust >= _throttle_thrust_max) {
-        throttle_thrust = _throttle_thrust_max;
-        limit.throttle_upper = true;
-    }
-
-    // _throttle_thrust_max (above) is the spool ramp limit, applied symmetrically.
+    // _throttle_thrust_max is the spool ramp limit, applied symmetrically.
     // Battery current limiting is applied separately, after the mix, via _output_limited.
-    // _max_throttle is set by the depth-holding modes (see SURFACE_MAX_THR) to attenuate
-    // upwards thrust only, so the vehicle doesn't keep pushing against the surface.
-    throttle_thrust = apply_max_throttle(throttle_thrust);
+    // cap upwards throttle and convert any world frame demand into the body frame
+    limit_and_rotate_linear_demands(throttle_thrust, forward_thrust, lateral_thrust);
 
     if ((sub_frame_t)_active_frame_class == SUB_FRAME_VECTORED_6DOF) {
         // Band Aid fix for motor normalization issues.
@@ -350,6 +391,7 @@ void AP_Motors6DOF::output_armed_stabilizing()
         }
 
         // Calculate final output for each motor and normalize if necessary
+        note_motor_saturation(MAX(rpt_max, yfl_max));
         for (uint8_t i = 0; i < AP_MOTORS_MAX_NUM_MOTORS; i++) {
             if (motor_enabled[i]) {
                 _thrust_rpyt_out[i] = constrain_float(_motor_reverse[i] * (rpt_out[i] / rpt_max + yfl_out[i] / yfl_max), -1.0f, 1.0f);
@@ -401,7 +443,9 @@ void AP_Motors6DOF::output_armed_stabilizing()
         // Calculate final output for each motor
         for (uint8_t i = 0; i < AP_MOTORS_MAX_NUM_MOTORS; i++) {
             if (motor_enabled[i]) {
-                _thrust_rpyt_out[i] = constrain_float(_motor_reverse[i] * (rpy_out[i] + linear_out[i]), -1.0f, 1.0f);
+                const float mixed = _motor_reverse[i] * (rpy_out[i] + linear_out[i]);
+                note_motor_saturation(mixed);
+                _thrust_rpyt_out[i] = constrain_float(mixed, -1.0f, 1.0f);
             }
         }
     }
