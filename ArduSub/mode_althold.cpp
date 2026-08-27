@@ -126,5 +126,5 @@ void ModeAlthold::control_depth() {
     }
 
     position_control->D_set_pos_target_from_climb_rate_cms(target_climb_rate_cms);
-    position_control->D_update_controller();
+    update_earth_frame_depth();
 }

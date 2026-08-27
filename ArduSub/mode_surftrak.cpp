@@ -142,7 +142,7 @@ void ModeSurftrak::control_range() {
     position_control->D_set_pos_target_from_climb_rate_cms(target_climb_rate_cms);
 
     // Run the PID controllers
-    position_control->D_update_controller();
+    update_earth_frame_depth();
 }
 
 /*

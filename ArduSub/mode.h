@@ -87,6 +87,7 @@ protected:
 
     // helper functions
     bool is_disarmed_or_landed() const;
+    void update_earth_frame_depth();
 
     // functions to control landing
     // in modes that support landing

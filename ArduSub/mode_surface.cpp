@@ -56,7 +56,7 @@ void ModeSurface::run()
 
         // update altitude target and call position controller
         position_control->D_set_pos_target_from_climb_rate_cms(cmb_rate_cms);
-        position_control->D_update_controller();
+        update_earth_frame_depth();
     }
     // pilot has control for repositioning
     motors.set_forward(channel_forward->norm_input());
