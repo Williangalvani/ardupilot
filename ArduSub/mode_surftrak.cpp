@@ -50,6 +50,7 @@ bool ModeSurftrak::init(bool ignore_checks)
 
 void ModeSurftrak::run()
 {
+    update_pilot_translation();
     run_pre();
 
     if (!motors.armed()) {
@@ -110,8 +111,8 @@ void ModeSurftrak::reset()
  * Main controller, call at 100hz+
  */
 void ModeSurftrak::control_range() {
-    float target_climb_rate_cms = sub.get_pilot_desired_climb_rate(channel_throttle->get_control_in());
-    target_climb_rate_cms = constrain_float(target_climb_rate_cms, -sub.get_pilot_speed_dn(), g.pilot_speed_up);
+    float target_climb_rate_cms = constrain_float(pilot_climb_rate_cms,
+                                                  -sub.get_pilot_speed_dn(), g.pilot_speed_up);
 
     // Desired_climb_rate returns 0 when within the deadzone
     if (fabsf(target_climb_rate_cms) < 0.05f)  {

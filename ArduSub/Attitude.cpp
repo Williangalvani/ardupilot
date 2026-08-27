@@ -130,9 +130,9 @@ float Sub::get_look_ahead_yaw()
  *  throttle control
  ****************************************************************/
 
-// get_pilot_desired_climb_rate - transform pilot's throttle input to climb rate in cm/s
-// without any deadzone at the bottom
-float Sub::get_pilot_desired_climb_rate(float throttle_control)
+// get_pilot_throttle_norm - pilot's throttle input as -1 ~ +1, with the throttle
+// deadzone applied but without any deadzone at the bottom
+float Sub::get_pilot_throttle_norm(float throttle_control)
 {
     // throttle failsafe check
     if (failsafe.pilot_input) {
@@ -152,18 +152,35 @@ float Sub::get_pilot_desired_climb_rate(float throttle_control)
     // check throttle is above, below or in the deadband
     if (throttle_control < deadband_bottom) {
         // below the deadband
-        return get_pilot_speed_dn() * (throttle_control-deadband_bottom) / deadband_bottom;
+        return (throttle_control-deadband_bottom) / deadband_bottom;
     } else if (throttle_control > deadband_top) {
         // above the deadband
-        return g.pilot_speed_up * (throttle_control-deadband_top) / (1000.0f-deadband_top);
+        return (throttle_control-deadband_top) / (1000.0f-deadband_top);
     } else {
         // must be in the deadband
         return 0.0f;
     }
 }
 
-// behavior is similar to Sub::get_pilot_desired_climb_rate
-float Sub::get_pilot_desired_horizontal_rate(RC_Channel *channel) const
+// get_pilot_desired_climb_rate - transform pilot's throttle input to climb rate in cm/s
+// without any deadzone at the bottom
+float Sub::get_pilot_desired_climb_rate(float throttle_control)
+{
+    return climb_rate_from_throttle_norm(get_pilot_throttle_norm(throttle_control));
+}
+
+// scale a -1 ~ +1 vertical demand by the asymmetric up and down pilot speeds
+float Sub::climb_rate_from_throttle_norm(float throttle_norm) const
+{
+    if (is_negative(throttle_norm)) {
+        return get_pilot_speed_dn() * throttle_norm;
+    }
+    return g.pilot_speed_up * throttle_norm;
+}
+
+// get_pilot_horizontal_norm - pilot's forward or lateral input as -1 ~ +1, with
+// the same deadzone the throttle stick uses
+float Sub::get_pilot_horizontal_norm(RC_Channel *channel) const
 {
     if (failsafe.pilot_input) {
         return 0;
@@ -179,14 +196,47 @@ float Sub::get_pilot_desired_horizontal_rate(RC_Channel *channel) const
 
     if (control < deadband_bottom) {
         // below the deadband
-        return (float)g.pilot_speed * (control - deadband_bottom);
+        return control - deadband_bottom;
     } else if (control > deadband_top) {
         // above the deadband
-        return (float)g.pilot_speed * (control - deadband_top);
+        return control - deadband_top;
     } else {
         // must be in the deadband
         return 0;
     }
+}
+
+// behavior is similar to Sub::get_pilot_desired_climb_rate
+float Sub::get_pilot_desired_horizontal_rate(RC_Channel *channel) const
+{
+    return (float)g.pilot_speed * get_pilot_horizontal_norm(channel);
+}
+
+// split the pilot's three translation sticks against gravity. The share along
+// earth up becomes a climb rate demand for the depth controller, and what is
+// left over is an earth horizontal thrust demand which stays in body axes.
+// Earth up in body axes is fixed by gravity alone, so no heading is involved
+// and the split is continuous at every attitude
+void Sub::get_pilot_translation_body(float &climb_rate_cms, Vector3f &thrust_body)
+{
+    // stick demands as a body frame vector, forward-right-down
+    const Vector3f stick_body{get_pilot_horizontal_norm(channel_forward),
+                              get_pilot_horizontal_norm(channel_lateral),
+                              -get_pilot_throttle_norm(channel_throttle->get_control_in())};
+
+    // third row of the body-to-NED rotation is earth down in body axes
+    const Vector3f up_body = -ahrs.get_rotation_body_to_ned().c;
+
+    const float climb_norm = stick_body * up_body;
+    thrust_body = stick_body - up_body * climb_norm;
+
+    // two sticks pushed at once can take the remainder past full scale
+    const float thrust_length = thrust_body.length();
+    if (thrust_length > 1.0f) {
+        thrust_body /= thrust_length;
+    }
+
+    climb_rate_cms = climb_rate_from_throttle_norm(climb_norm);
 }
 
 // rotate vector from vehicle's perspective to North-East frame

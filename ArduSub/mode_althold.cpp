@@ -22,6 +22,7 @@ bool ModeAlthold::init(bool ignore_checks) {
 // should be called at 100hz or more
 void ModeAlthold::run()
 {
+    update_pilot_translation();
     run_pre();
     control_depth();
     run_post();
@@ -75,10 +76,29 @@ void ModeAlthold::run_pre()
     sub.control_pilot_attitude(target_yaw_rate);
 }
 
+bool ModeAlthold::uses_earth_frame_translation() const
+{
+    return sub.earth_frame_translation_enabled();
+}
+
+// read the pilot's translation sticks once per loop, splitting them against gravity when
+// EarthFrameTranslation is set. The vertical part drives the depth target and the rest is thrust
+void ModeAlthold::update_pilot_translation()
+{
+    if (uses_earth_frame_translation()) {
+        sub.get_pilot_translation_body(pilot_climb_rate_cms, pilot_thrust_body);
+        return;
+    }
+
+    pilot_climb_rate_cms = sub.get_pilot_desired_climb_rate(channel_throttle->get_control_in());
+    pilot_thrust_body = {channel_forward->norm_input(), channel_lateral->norm_input(), 0.0f};
+}
+
 void ModeAlthold::run_post()
 {
-    motors.set_forward(channel_forward->norm_input());
-    motors.set_lateral(channel_lateral->norm_input());
+    motors.set_forward(pilot_thrust_body.x);
+    motors.set_lateral(pilot_thrust_body.y);
+    motors.set_throttle_body(-pilot_thrust_body.z);
 }
 
 void ModeAlthold::control_depth() {
@@ -88,8 +108,8 @@ void ModeAlthold::control_depth() {
     distance_to_surface = constrain_float(distance_to_surface, 0.0f, 1.0f);
     motors.set_max_throttle(g.surface_max_throttle + (1.0f - g.surface_max_throttle) * distance_to_surface);
 
-    float target_climb_rate_cms = sub.get_pilot_desired_climb_rate(channel_throttle->get_control_in());
-    target_climb_rate_cms = constrain_float(target_climb_rate_cms, -sub.get_pilot_speed_dn(), g.pilot_speed_up);
+    float target_climb_rate_cms = constrain_float(pilot_climb_rate_cms,
+                                                  -sub.get_pilot_speed_dn(), g.pilot_speed_up);
 
     // desired_climb_rate returns 0 when within the deadzone.
     //we allow full control to the pilot, but as soon as there's no input, we handle being at surface/bottom

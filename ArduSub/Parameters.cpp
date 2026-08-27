@@ -258,6 +258,13 @@ const AP_Param::Info Sub::var_info[] = {
     // @User: Standard
     GSCALAR(pilot_trim_rate,     "PILOT_TRIM_RATE",   PILOT_TRIM_RATE_DEFAULT),
 
+    // @Param: PILOT_OPTIONS
+    // @DisplayName: Pilot control options
+    // @Description: Bitmask of optional pilot control behaviours. EarthFrameTranslation splits the throttle, forward and lateral sticks against gravity in the depth holding modes, so that the share along earth up drives the depth target and the remainder is horizontal thrust. With the vehicle level this is identical to the default behaviour; rolled or pitched 90 degrees the throttle stick drives horizontal motion and the lateral or forward stick drives depth.
+    // @Bitmask: 0:EarthFrameTranslation
+    // @User: Standard
+    GSCALAR(pilot_options,     "PILOT_OPTIONS",   0),
+
     // @Param: PILOT_ACCEL_Z
     // @DisplayName: Pilot vertical acceleration
     // @Description: The vertical acceleration used when pilot is controlling the altitude

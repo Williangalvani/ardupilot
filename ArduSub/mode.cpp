@@ -150,6 +150,7 @@ void Sub::exit_mode(Mode::Number old_control_mode, Mode::Number new_control_mode
     }
     motors.set_max_throttle(1.0f);
     motors.set_earth_frame_throttle(false);
+    motors.set_throttle_body(0.0f);
     attitude_hold_active = false;
 }
 
@@ -173,6 +174,7 @@ void Sub::exit_mode(Mode *&old_flightmode, Mode *&new_flightmode){
 #endif  // HAL_MOUNT_ENABLED
     motors.set_max_throttle(1.0f);
     motors.set_earth_frame_throttle(false);
+    motors.set_throttle_body(0.0f);
     attitude_hold_active = false;
 }
 
