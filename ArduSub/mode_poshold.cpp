@@ -37,6 +37,9 @@ bool ModePoshold::init(bool ignore_checks)
 // should be called at 100hz or more
 void ModePoshold::run()
 {
+    // control_depth() flies the depth from this sample, so it has to be taken every loop
+    update_pilot_translation();
+
     // When unarmed, disable motors and stabilization
     if (!motors.armed()) {
         motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);

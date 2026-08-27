@@ -123,6 +123,11 @@ public:
 
     Sub(void);
 
+    // PILOT_OPTIONS bitmask
+    enum class PilotOptions : int16_t {
+        EarthFrameTranslation = (1 << 0),
+    };
+
 protected:
 
     bool should_zero_rc_outputs_on_reboot() const override { return true; }
@@ -411,8 +416,15 @@ private:
     void check_ekf_yaw_reset();
     float get_roi_yaw();
     float get_look_ahead_yaw();
+    float get_pilot_throttle_norm(float throttle_control);
     float get_pilot_desired_climb_rate(float throttle_control);
+    float climb_rate_from_throttle_norm(float throttle_norm) const;
+    float get_pilot_horizontal_norm(RC_Channel *channel) const;
     float get_pilot_desired_horizontal_rate(RC_Channel *channel) const;
+    void get_pilot_translation_body(float &climb_rate_cms, Vector3f &thrust_body);
+    bool earth_frame_translation_enabled() const {
+        return (g.pilot_options & int16_t(PilotOptions::EarthFrameTranslation)) != 0;
+    }
     void rotate_body_frame_to_NE(float &x, float &y);
 #if HAL_LOGGING_ENABLED
     // methods for AP_Vehicle:

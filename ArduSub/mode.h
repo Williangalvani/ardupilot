@@ -208,6 +208,14 @@ protected:
 
     void run_pre();
     void run_post();
+    void update_pilot_translation();
+
+    // whether update_pilot_translation() splits the pilot's sticks against gravity
+    virtual bool uses_earth_frame_translation() const;
+
+    // the pilot's translation demands, refreshed once per loop by update_pilot_translation()
+    float pilot_climb_rate_cms = 0.0f;
+    Vector3f pilot_thrust_body;
 
     const char *name() const override { return "Depth Hold"; }
     const char *name4() const override { return "ALTH"; }
@@ -365,6 +373,10 @@ protected:
     const char *name() const override { return "Position Hold"; }
     const char *name4() const override { return "POSH"; }
     Mode::Number number() const override { return Mode::Number::POSHOLD; }
+
+    // the horizontal axes are flown by the position controller from the same sticks, so
+    // splitting them against gravity here would use the pilot's demand twice
+    bool uses_earth_frame_translation() const override { return false; }
 
 private:
 
