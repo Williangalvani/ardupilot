@@ -39,6 +39,10 @@ public:
     // earth frame throttle demand across the body axes
     void set_earth_up_body(const Vector3f &up_body) { _up_body = up_body; }
 
+    // body frame vertical thrust, added after the earth frame throttle demand
+    // has been distributed. range -1 ~ +1, positive is body up
+    void set_throttle_body(float thrust) { _throttle_body = thrust; }
+
     // Override parent
     void output_min() override;
 
@@ -80,13 +84,13 @@ protected:
     float apply_max_throttle(float throttle_thrust);
 
     // cap upwards throttle, then distribute the linear demands across the body axes
-    void limit_and_rotate_linear_demands(float &throttle, float &forward, float &lateral);
+    float limit_and_rotate_linear_demands(float &throttle, float &forward, float &lateral);
 
     // distribute the linear demands across the body axes
     void linear_demands_to_body(float &throttle, float &forward, float &lateral) const;
 
     // record motor saturation for the depth controller when the throttle demand is earth frame
-    void note_motor_saturation(float mixed);
+    void note_motor_saturation(float mixed, float earth_up_demand);
 
     // Parameters
     AP_Int8             _motor_reverse[AP_MOTORS_MAX_NUM_MOTORS];
@@ -105,6 +109,9 @@ protected:
     // unit vector along earth up expressed in body axes. Defaults to body up so
     // that an earth frame demand is inert until the vehicle supplies an attitude
     Vector3f _up_body{0.0f, 0.0f, -1.0f};
+
+    // body frame vertical thrust demand, added after any earth frame distribution
+    float _throttle_body = 0.0f;
 
     // the throttle demand is earth up rather than body up
     bool _earth_frame_throttle = false;
