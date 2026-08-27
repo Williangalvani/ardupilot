@@ -32,6 +32,13 @@ public:
     // Override parent
     void setup_motors(motor_frame_class frame_class, motor_frame_type frame_type) override;
 
+    // interpret the throttle demand as earth up rather than body up
+    void set_earth_frame_throttle(bool earth_frame) { _earth_frame_throttle = earth_frame; }
+
+    // unit vector along earth up expressed in body axes, used to spread an
+    // earth frame throttle demand across the body axes
+    void set_earth_up_body(const Vector3f &up_body) { _up_body = up_body; }
+
     // Override parent
     void output_min() override;
 
@@ -69,6 +76,15 @@ protected:
     // Used to limit the motors output when surfaced to avoid sucking in air and wasting power
     float apply_max_throttle(float throttle_thrust);
 
+    // cap upwards throttle, then distribute the linear demands across the body axes
+    void limit_and_rotate_linear_demands(float &throttle, float &forward, float &lateral);
+
+    // distribute the linear demands across the body axes
+    void linear_demands_to_body(float &throttle, float &forward, float &lateral) const;
+
+    // record motor saturation for the depth controller when the throttle demand is earth frame
+    void note_motor_saturation(float mixed);
+
     // Parameters
     AP_Int8             _motor_reverse[AP_MOTORS_MAX_NUM_MOTORS];
     AP_Float            _forwardVerticalCouplingFactor;
@@ -80,4 +96,11 @@ protected:
     // current limiting
     float _output_limited = 1.0f;
     float _batt_current_last = 0.0f;
+
+    // unit vector along earth up expressed in body axes. Defaults to body up so
+    // that an earth frame demand is inert until the vehicle supplies an attitude
+    Vector3f _up_body{0.0f, 0.0f, -1.0f};
+
+    // the throttle demand is earth up rather than body up
+    bool _earth_frame_throttle = false;
 };
