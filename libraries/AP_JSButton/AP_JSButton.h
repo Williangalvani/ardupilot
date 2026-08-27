@@ -43,10 +43,10 @@ public:
         k_gain_toggle           = 41,           ///< toggle different gain settings
         k_gain_inc              = 42,           ///< increase control gain
         k_gain_dec              = 43,           ///< decrease control gain
-        k_trim_roll_inc         = 44,           ///< increase roll trim
-        k_trim_roll_dec         = 45,           ///< decrease roll trim
-        k_trim_pitch_inc        = 46,           ///< increase pitch trim
-        k_trim_pitch_dec        = 47,           ///< decrease pitch trim
+        k_trim_roll_inc         = 44,           ///< roll + while held
+        k_trim_roll_dec         = 45,           ///< roll - while held
+        k_trim_pitch_inc        = 46,           ///< pitch + while held
+        k_trim_pitch_dec        = 47,           ///< pitch - while held
         k_input_hold_set        = 48,           ///< toggle input hold (trim to current controls)
         k_roll_pitch_toggle     = 49,           ///< adjust roll/pitch input instead of forward/lateral
 
