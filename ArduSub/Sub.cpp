@@ -177,6 +177,9 @@ void Sub::run_rate_controller()
     attitude_control.set_dt_s(last_loop_time_s);
     pos_control.set_dt_s(last_loop_time_s);
 
+    // the motors need earth up in body axes to mix an earth frame throttle demand
+    motors.set_earth_up_body(-ahrs.get_rotation_body_to_ned().c);
+
     //don't run rate controller in manual or motordetection modes
     if (control_mode != Mode::Number::MANUAL && control_mode != Mode::Number::MOTOR_DETECT) {
         // run low level rate controllers that only require IMU data and set loop time

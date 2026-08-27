@@ -489,7 +489,7 @@ void ModeGuided::guided_pos_control_run()
 
     // WP_Nav has set the vertical position control targets
     // run the vertical position controller and set output throttle
-    position_control->D_update_controller();
+    update_earth_frame_depth();
 
     // call attitude controller
     if (sub.auto_yaw_mode == AUTO_YAW_HOLD) {
@@ -555,7 +555,7 @@ void ModeGuided::guided_vel_control_run()
     position_control->NE_update_controller();
 
     position_control->D_set_pos_target_from_climb_rate_cms(position_control->get_vel_desired_NEU_cms().z);
-    position_control->D_update_controller();
+    update_earth_frame_depth();
 
     float lateral_out, forward_out;
     sub.translate_pos_control_rp(lateral_out, forward_out);
@@ -633,7 +633,7 @@ void ModeGuided::guided_posvelaccel_control_run()
 
     // run position controller
     position_control->NE_update_controller();
-    position_control->D_update_controller();
+    update_earth_frame_depth();
 
     float lateral_out, forward_out;
     sub.translate_pos_control_rp(lateral_out, forward_out);
@@ -708,7 +708,7 @@ void ModeGuided::guided_angle_control_run()
 
     // call position controller
     position_control->D_set_pos_target_from_climb_rate_cms(climb_rate_cms);
-    position_control->D_update_controller();
+    update_earth_frame_depth();
 }
 
 // Guided Limit code

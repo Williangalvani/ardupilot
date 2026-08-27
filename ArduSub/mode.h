@@ -76,6 +76,9 @@ protected:
     // navigation support functions
     virtual void run_autopilot() {}
 
+    // publish earth-up in body axes and mark the depth demand as earth frame
+    void update_earth_frame_depth();
+
     // convenience references to avoid code churn in conversion:
     Parameters &g;
     ParametersG2 &g2;
