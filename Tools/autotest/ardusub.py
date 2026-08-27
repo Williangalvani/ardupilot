@@ -1334,15 +1334,38 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
         # threshold for validation of altitude change
         altitude_change_threshold = 0.2
 
+        maneuver_seconds = 5
+
+        def depth_change(maneuver):
+            alt_before = self.assert_receive_message('VFR_HUD').alt
+            maneuver()
+            return self.assert_receive_message('VFR_HUD').alt - alt_before
+
+        def roll_out_and_back():
+            """Roll away from level and back to it. The roll stick commands a rate, so the vehicle
+            has to be flown back to level and the input stopped as it passes through, rather than
+            simply released."""
+            self.set_rc(Joystick.Roll, 1700)
+            self.delay_sim_time(2, reason="roll away from level")
+            self.set_rc(Joystick.Roll, 1300)
+            tstart = self.get_sim_time()
+            while self.assert_receive_message('ATTITUDE').roll > 0:
+                if self.get_sim_time_cached() - tstart > 20:
+                    raise NotAchievedException("Vehicle would not roll back to level")
+            self.set_rc(Joystick.Roll, 1500)
+            self.delay_sim_time(1, reason="allow the attitude to settle")
+
+        def roll_coupled_depth_change():
+            """Depth moved by a roll, less the depth the vehicle moves anyway. There is no depth
+            control in this mode, so a drifting vehicle must not be read as a coupled one."""
+            drift = depth_change(
+                lambda: self.delay_sim_time(maneuver_seconds, reason="measure the depth drift"))
+            return abs(depth_change(roll_out_and_back) - drift)
+
         # verify that roll causes depth change without compensation
         self.set_parameter("SIM_THRUST_ASYM", 0.8)
         self.set_parameter("MOT_THST_ASYM", 1.0)
-        alt_before = self.assert_receive_message('VFR_HUD').alt
-        self.set_rc(Joystick.Roll, 1700)
-        self.delay_sim_time(5, reason="wait for roll change to take effect")
-        self.set_rc(Joystick.Roll, 1500)
-        alt_after = self.assert_receive_message('VFR_HUD').alt
-        alt_delta = abs(alt_after - alt_before)
+        alt_delta = roll_coupled_depth_change()
         self.progress("Uncompensated altitude change: %.2f m" % alt_delta)
         if alt_delta < altitude_change_threshold:
             raise NotAchievedException(
@@ -1354,20 +1377,102 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
             self.set_parameter("SIM_THRUST_ASYM", asymmetry)
             self.set_parameter("MOT_THST_ASYM", asymmetry)
 
-            self.set_rc(Joystick.Throttle, 1500)
-            self.wait_climbrate(-0.005, 0.005, timeout=50)
-
-            alt_before = self.assert_receive_message('VFR_HUD').alt
-            self.set_rc(Joystick.Roll, 1700)
-            self.delay_sim_time(5, reason="wait for roll change to take effect")
-            self.set_rc(Joystick.Roll, 1500)
-            alt_after = self.assert_receive_message('VFR_HUD').alt
-            alt_delta = abs(alt_after - alt_before)
+            alt_delta = roll_coupled_depth_change()
             self.progress("Compensated altitude change (asymmetry %.1f): %.2f m" % (asymmetry, alt_delta))
             if alt_delta > altitude_change_threshold:
                 raise NotAchievedException(
                     "Expected altitude to be maintained with compensation (asymmetry %.1f), got %.2f m change"
                     % (asymmetry, alt_delta))
+
+        self.disarm_vehicle()
+
+    def MomentaryTrimButtons(self):
+        """Test that the roll and pitch trim buttons rotate the vehicle while they are held.
+        The buttons are momentary: the vehicle rotates for as long as a button is held, is not
+        limited in how far it may rotate, and holds whatever attitude it reached on release."""
+        self.customise_SITL_commandline(
+            [],
+            model="vectored_6dof",
+            defaults_filepath=self.model_defaults_filepath('vectored_6dof'),
+        )
+
+        # the buttons stop rotating the vehicle if the pilot goes quiet, so the simulation must not
+        # outrun the rate at which this test can send MANUAL_CONTROL
+        self.context_set_speedup(1)
+
+        trim_rate_degs = 45
+        self.set_parameters({
+            "BTN0_FUNCTION": 44,   # k_trim_roll_inc
+            "BTN15_FUNCTION": 46,  # k_trim_pitch_inc
+            "PILOT_TRIM_RATE": trim_rate_degs,
+            "MAV_GCS_SYSID": self.mav.source_system,  # so our MANUAL_CONTROL is accepted
+        })
+
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.dive(-10)
+        self.change_mode('ALT_HOLD')
+        self.delay_sim_time(2, reason="allow alt hold to settle")
+
+        def hold_buttons(button_mask, seconds):
+            """Hold the given buttons for the given time and report the rotation rate that
+            resulted. Rates are used rather than angles because the vehicle is free to turn
+            through any number of revolutions, which an angle cannot describe."""
+            rates = []
+            tstart = self.get_sim_time()
+            while self.get_sim_time_cached() - tstart < seconds:
+                self.mav.mav.manual_control_send(
+                    self.sysid_thismav(),
+                    0,    # x, forward
+                    0,    # y, lateral
+                    500,  # z, neutral throttle
+                    0,    # r, yaw
+                    button_mask)
+                att = self.assert_receive_message('ATTITUDE')
+                rates.append((degrees(att.rollspeed), degrees(att.pitchspeed)))
+            # ignore the first half, the vehicle needs a moment to reach or leave the demanded rate
+            return rates[len(rates) // 2:]
+
+        # a held button turns the vehicle at PILOT_TRIM_RATE, and keeps turning at that rate for
+        # as long as it is held. Holding for longer than a revolution takes shows that there is no
+        # angle limit to stop it, so the slowest rate seen matters as much as the average
+        self.start_subtest("Roll button held turns the vehicle continuously")
+        hold_seconds = 2 * 360 / trim_rate_degs
+        rates = hold_buttons(1 << 0, hold_seconds)
+        roll_rates = [r[0] for r in rates]
+        self.progress("Roll rate mean %.0f min %.0f deg/s over %.0f seconds"
+                      % (sum(roll_rates) / len(roll_rates), min(roll_rates), hold_seconds))
+        if min(roll_rates) < 0.5 * trim_rate_degs:
+            raise NotAchievedException(
+                "Expected roll to keep turning at %d deg/s, it slowed to %.0f"
+                % (trim_rate_degs, min(roll_rates)))
+        pitch_rates = [r[1] for r in rates]
+        if max(abs(r) for r in pitch_rates) > 0.5 * trim_rate_degs:
+            raise NotAchievedException(
+                "Roll button turned pitch at up to %.0f deg/s" % max(abs(r) for r in pitch_rates))
+
+        # releasing the button stops the rotation rather than returning the vehicle to level
+        self.start_subtest("Released roll button stops the rotation")
+        held_roll = degrees(self.assert_receive_message('ATTITUDE').roll)
+        rates = hold_buttons(0, 5)
+        roll_rates = [r[0] for r in rates]
+        settled_roll = degrees(self.assert_receive_message('ATTITUDE').roll)
+        self.progress("Roll rate after release %.1f deg/s, roll %.0f then %.0f"
+                      % (max(abs(r) for r in roll_rates), held_roll, settled_roll))
+        if max(abs(r) for r in roll_rates) > 5:
+            raise NotAchievedException(
+                "Expected roll to stop on release, still turning at %.0f deg/s"
+                % max(abs(r) for r in roll_rates))
+
+        self.start_subtest("Pitch button held turns the vehicle continuously")
+        rates = hold_buttons(1 << 15, hold_seconds)
+        pitch_rates = [r[1] for r in rates]
+        self.progress("Pitch rate mean %.0f min %.0f deg/s"
+                      % (sum(pitch_rates) / len(pitch_rates), min(pitch_rates)))
+        if min(pitch_rates) < 0.5 * trim_rate_degs:
+            raise NotAchievedException(
+                "Expected pitch to keep turning at %d deg/s, it slowed to %.0f"
+                % (trim_rate_degs, min(pitch_rates)))
 
         self.disarm_vehicle()
 
@@ -1966,6 +2071,7 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
             self.SHT3X,
             self.SurfaceSensorless,
             self.AsymmetricThrustCoupling,
+            self.MomentaryTrimButtons,
             self.GPSForYaw,
             self.WaterDepth,
             self.VisoForYaw,
