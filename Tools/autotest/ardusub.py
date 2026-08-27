@@ -12,6 +12,7 @@ import re
 
 from math import degrees
 from math import radians
+from math import sqrt
 
 from pymavlink import mavextra
 from pymavlink import mavutil
@@ -1476,6 +1477,130 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
 
         self.disarm_vehicle()
 
+    def EarthFrameSticks(self):
+        """Test that the translation sticks are split against gravity in the depth holding modes.
+        With the PILOT_OPTIONS EarthFrameTranslation bit set the share of the stick demand that
+        points along earth up drives the depth target, and whatever is left over becomes
+        horizontal thrust. Level this is the same as the default behaviour. Rolled 90 degrees the
+        roles of the throttle and lateral sticks have swapped over."""
+        self.customise_SITL_commandline(
+            [],
+            model="vectored_6dof",
+            defaults_filepath=self.model_defaults_filepath('vectored_6dof'),
+        )
+
+        trim_rate_degs = 45
+        self.set_parameters({
+            "PILOT_TRIM_RATE": trim_rate_degs,
+            "PILOT_OPTIONS": 0,
+        })
+
+        # the vehicle has to be deep enough that a climbing subtest cannot reach the surface,
+        # where SURFACE_MAX_THR would cap the depth controller and confuse the comparison
+        test_depth_m = -25
+        self.dive(test_depth_m)
+        self.change_mode('ALT_HOLD')
+        self.delay_sim_time(5, reason="allow alt hold to settle")
+
+        def roll_to(target_deg, accuracy_deg=10):
+            """Fly to a roll attitude with the roll stick, which commands a rate. The demand is
+            stepped down as the target is approached so the vehicle settles on it rather than
+            sailing past."""
+            tstart = self.get_sim_time()
+            held_pwm = None
+            for demand_pwm, tolerance_deg in [(400, 30), (150, 10), (80, 3)]:
+                while True:
+                    error = target_deg - degrees(self.assert_receive_message('ATTITUDE').roll)
+                    if abs(error) < tolerance_deg:
+                        break
+                    if self.get_sim_time_cached() - tstart > 180:
+                        raise NotAchievedException(
+                            "Vehicle would not roll to %d degrees, stopped %.0f degrees away"
+                            % (target_deg, error))
+                    wanted_pwm = 1500 + (demand_pwm if error > 0 else -demand_pwm)
+                    if wanted_pwm != held_pwm:
+                        self.set_rc(Joystick.Roll, wanted_pwm)
+                        held_pwm = wanted_pwm
+            self.set_rc(Joystick.Roll, 1500)
+            self.delay_sim_time(10, reason="allow the attitude and the depth to settle")
+            reached = degrees(self.assert_receive_message('ATTITUDE').roll)
+            self.progress("Rolled to %.0f degrees, wanted %d" % (reached, target_deg))
+            if abs(reached - target_deg) > accuracy_deg:
+                raise NotAchievedException(
+                    "Expected %d degrees of roll to be held, settled at %.0f" % (target_deg, reached))
+
+        def hold_stick(channel, pwm, seconds=5):
+            """Hold one translation stick and report how far the vehicle travelled horizontally
+            and how far it rose, both in metres."""
+            start = self.assert_receive_message('LOCAL_POSITION_NED')
+            self.set_rc(channel, pwm)
+            self.delay_sim_time(seconds, reason="measure the response to the stick")
+            end = self.assert_receive_message('LOCAL_POSITION_NED')
+            self.set_rc(channel, 1500)
+            self.delay_sim_time(5, reason="allow the vehicle to settle")
+            horizontal = sqrt((end.x - start.x) ** 2 + (end.y - start.y) ** 2)
+            return horizontal, start.z - end.z
+
+        # a stick that is doing its job moves the vehicle much further than this, and a stick
+        # that should be doing nothing to an axis moves it much less
+        moved_m = 1.0
+        still_m = 0.5
+
+        self.start_subtest("Level, the split leaves the sticks alone")
+        for options in [0, 1]:
+            self.set_parameter("PILOT_OPTIONS", options)
+            horizontal, up = hold_stick(Joystick.Throttle, 1900)
+            self.progress("PILOT_OPTIONS %d: throttle stick rose %.1f m, moved %.1f m horizontally"
+                          % (options, up, horizontal))
+            if up < moved_m:
+                raise NotAchievedException(
+                    "Expected the throttle stick to climb when level, rose only %.1f m" % up)
+            if horizontal > still_m:
+                raise NotAchievedException(
+                    "Expected no horizontal motion from the throttle stick when level, moved %.1f m"
+                    % horizontal)
+            self.dive(test_depth_m, mode='ALT_HOLD')
+            self.delay_sim_time(5, reason="allow alt hold to settle")
+
+        self.start_subtest("Rolled 90 degrees with the option clear, the throttle stick still climbs")
+        self.set_parameter("PILOT_OPTIONS", 0)
+        roll_to(90)
+        horizontal, up = hold_stick(Joystick.Throttle, 1900)
+        self.progress("Rolled, option clear: throttle stick rose %.1f m, moved %.1f m horizontally"
+                      % (up, horizontal))
+        if up < moved_m:
+            raise NotAchievedException(
+                "Expected the throttle stick to climb with the option clear, rose only %.1f m" % up)
+
+        self.start_subtest("Rolled 90 degrees with the option set, the throttle stick drives horizontally")
+        self.set_parameter("PILOT_OPTIONS", 1)
+        self.delay_sim_time(5, reason="allow the depth to settle")
+        horizontal, up = hold_stick(Joystick.Throttle, 1900)
+        self.progress("Rolled, option set: throttle stick rose %.1f m, moved %.1f m horizontally"
+                      % (up, horizontal))
+        if horizontal < moved_m:
+            raise NotAchievedException(
+                "Expected the throttle stick to drive horizontally when rolled, moved only %.1f m"
+                % horizontal)
+        if abs(up) > still_m:
+            raise NotAchievedException(
+                "Expected depth to be held while the throttle stick was driving horizontally, "
+                "depth moved %.1f m" % up)
+
+        self.start_subtest("Rolled 90 degrees with the option set, the lateral stick drives depth")
+        # rolled right the body right axis points earth down, so a right lateral demand descends
+        horizontal, up = hold_stick(Joystick.Lateral, 1900)
+        self.progress("Rolled, option set: lateral stick rose %.1f m, moved %.1f m horizontally"
+                      % (up, horizontal))
+        if up > -moved_m:
+            raise NotAchievedException(
+                "Expected the lateral stick to descend when rolled right, rose %.1f m" % up)
+
+        # the vehicle must be able to fly back out of the roll it has been left in
+        roll_to(0, accuracy_deg=20)
+
+        self.disarm_vehicle()
+
     def SurfaceSensorless(self):
         """Test surface mode with sensorless thrust"""
         # this drives the throttle down and waits to arrive at 9.5m, so
@@ -2072,6 +2197,7 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
             self.SurfaceSensorless,
             self.AsymmetricThrustCoupling,
             self.MomentaryTrimButtons,
+            self.EarthFrameSticks,
             self.GPSForYaw,
             self.WaterDepth,
             self.VisoForYaw,
