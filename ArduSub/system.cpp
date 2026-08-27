@@ -129,7 +129,10 @@ void Sub::init_ardupilot()
 
     leak_detector.init();
 
-    last_pilot_heading_rad = ahrs.get_yaw_rad();
+    attitude_hold_active = false;
+    pilot_trim_roll_dir = 0;
+    pilot_trim_pitch_dir = 0;
+    last_trim_button_ms = 0;
 
     // initialise rangefinder
 #if AP_RANGEFINDER_ENABLED

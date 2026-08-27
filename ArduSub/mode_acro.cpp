@@ -29,6 +29,9 @@ void ModeAcro::run()
     // convert the input to the desired body frame rate
     get_pilot_desired_angle_rates(channel_roll->get_control_in(), channel_pitch->get_control_in(), channel_yaw->get_control_in(), target_roll, target_pitch, target_yaw);
 
+    target_roll += sub.get_pilot_trim_roll_rate_cds();
+    target_pitch += sub.get_pilot_trim_pitch_rate_cds();
+
     // run attitude controller
     attitude_control->input_rate_bf_roll_pitch_yaw_cds(target_roll, target_pitch, target_yaw);
 
