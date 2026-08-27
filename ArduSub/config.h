@@ -184,6 +184,13 @@
 #ifndef PILOT_ACCEL_Z_DEFAULT
 # define PILOT_ACCEL_Z_DEFAULT 100 // vertical acceleration in cm/s/s while altitude is under pilot control
 #endif
+#ifndef PILOT_TRIM_RATE_DEFAULT
+# define PILOT_TRIM_RATE_DEFAULT 30 // roll and pitch rate in deg/s requested by the trim buttons
+#endif
+// the trim buttons stop rotating the vehicle if the pilot has not been heard from for this long
+#ifndef PILOT_TRIM_BUTTON_TIMEOUT_MS
+# define PILOT_TRIM_BUTTON_TIMEOUT_MS 500
+#endif
 
 #ifndef AUTO_DISARMING_DELAY
 # define AUTO_DISARMING_DELAY  0

@@ -78,6 +78,12 @@ void Sub::transform_manual_control_to_rc_override(int16_t x, int16_t y, int16_t 
         }
     }
 
+    // the roll and pitch trim buttons are momentary, so their demand is rebuilt from the buttons
+    // that are held in this message rather than accumulated across messages
+    pilot_trim_roll_dir = 0;
+    pilot_trim_pitch_dir = 0;
+    last_trim_button_ms = AP_HAL::millis();
+
     // Act if button is pressed
     // Only act upon pressing button and ignore holding. This provides compatibility with Taranis as joystick.
     for (uint8_t i = 0 ; i < 32 ; i++) {
@@ -96,6 +102,11 @@ void Sub::transform_manual_control_to_rc_override(int16_t x, int16_t y, int16_t 
     // adjust roll/pitch trim with joystick input instead of forward/lateral
         pitchTrim = -x * rpyScale;
         rollTrim  =  y * rpyScale;
+    } else {
+        // the roll and pitch channels now ask for rotation rather than a fixed lean angle, so they
+        // must not be left holding an offset from the last time the sticks flew attitude
+        pitchTrim = 0;
+        rollTrim = 0;
     }
 
     uint32_t tnow = AP_HAL::millis();
@@ -336,16 +347,16 @@ void Sub::handle_jsbutton_press(uint8_t _button, bool shift, bool held)
         }
         break;
     case JSButton::button_function_t::k_trim_roll_inc:
-        rollTrim = constrain_float(rollTrim+10,-200,200);
+        pilot_trim_roll_dir = 1;
         break;
     case JSButton::button_function_t::k_trim_roll_dec:
-        rollTrim = constrain_float(rollTrim-10,-200,200);
+        pilot_trim_roll_dir = -1;
         break;
     case JSButton::button_function_t::k_trim_pitch_inc:
-        pitchTrim = constrain_float(pitchTrim+10,-200,200);
+        pilot_trim_pitch_dir = 1;
         break;
     case JSButton::button_function_t::k_trim_pitch_dec:
-        pitchTrim = constrain_float(pitchTrim-10,-200,200);
+        pilot_trim_pitch_dir = -1;
         break;
     case JSButton::button_function_t::k_input_hold_set:
         if(!motors.armed()) {

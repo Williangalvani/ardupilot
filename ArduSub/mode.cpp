@@ -150,6 +150,7 @@ void Sub::exit_mode(Mode::Number old_control_mode, Mode::Number new_control_mode
     }
     motors.set_max_throttle(1.0f);
     motors.set_earth_frame_throttle(false);
+    attitude_hold_active = false;
 }
 
 bool Sub::set_mode(const uint8_t new_mode, const ModeReason reason)
@@ -172,6 +173,7 @@ void Sub::exit_mode(Mode *&old_flightmode, Mode *&new_flightmode){
 #endif  // HAL_MOUNT_ENABLED
     motors.set_max_throttle(1.0f);
     motors.set_earth_frame_throttle(false);
+    attitude_hold_active = false;
 }
 
 // notify_flight_mode - sets notify object based on current flight mode.  Only used for OreoLED notify device

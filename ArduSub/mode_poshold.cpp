@@ -30,8 +30,6 @@ bool ModePoshold::init(bool ignore_checks)
     attitude_control->relax_attitude_controllers();
     position_control->D_relax_controller(0.5f);
 
-    sub.last_pilot_heading_rad = ahrs.get_yaw_rad();
-
     return true;
 }
 
@@ -39,7 +37,6 @@ bool ModePoshold::init(bool ignore_checks)
 // should be called at 100hz or more
 void ModePoshold::run()
 {
-    uint32_t tnow = AP_HAL::millis();
     // When unarmed, disable motors and stabilization
     if (!motors.armed()) {
         motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
@@ -48,7 +45,7 @@ void ModePoshold::run()
         attitude_control->relax_attitude_controllers();
         position_control->NE_init_controller_stopping_point();
         position_control->D_relax_controller(0.5f);
-        sub.last_pilot_heading_rad = ahrs.get_yaw_rad();
+        sub.attitude_hold_active = false;
         return;
     }
 
@@ -62,32 +59,7 @@ void ModePoshold::run()
     float yaw_input = channel_yaw->pwm_to_angle_dz_trim(channel_yaw->get_dead_zone() * sub.gain, channel_yaw->get_radio_trim());
     float target_yaw_rate = sub.get_pilot_desired_yaw_rate(yaw_input);
 
-    // convert pilot input to lean angles
-    // To-Do: convert get_pilot_desired_lean_angles to return angles as floats
-    float target_roll, target_pitch;
-    sub.get_pilot_desired_lean_angles(channel_roll->get_control_in(), channel_pitch->get_control_in(), target_roll, target_pitch, attitude_control->lean_angle_max_cd());
-
-    // update attitude controller targets
-    if (!is_zero(target_yaw_rate)) { // call attitude controller with rate yaw determined by pilot input
-        attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw_cd(target_roll, target_pitch, target_yaw_rate);
-        sub.last_pilot_heading_rad = ahrs.get_yaw_rad();
-        sub.last_pilot_yaw_input_ms = tnow; // time when pilot last changed heading
-
-    } else { // hold current heading
-
-        // this check is required to prevent bounce back after very fast yaw manoeuvres
-        // the inertia of the vehicle causes the heading to move slightly past the point when pilot input actually stopped
-        if (tnow < sub.last_pilot_yaw_input_ms + 250) { // give 250ms to slow down, then set target heading
-            target_yaw_rate = 0; // Stop rotation on yaw axis
-
-            // call attitude controller with target yaw rate = 0 to decelerate on yaw axis
-            attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw_cd(target_roll, target_pitch, target_yaw_rate);
-            sub.last_pilot_heading_rad = ahrs.get_yaw_rad(); // update heading to hold
-
-        } else { // call attitude controller holding absolute bearing
-            attitude_control->input_euler_angle_roll_pitch_yaw_cd(target_roll, target_pitch, rad_to_cd(sub.last_pilot_heading_rad), true);
-        }
-    }
+    sub.control_pilot_attitude(target_yaw_rate);
 
     // update z axis
     control_depth();

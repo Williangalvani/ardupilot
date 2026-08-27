@@ -249,6 +249,15 @@ const AP_Param::Info Sub::var_info[] = {
     // @User: Standard
     GSCALAR(pilot_speed,     "PILOT_SPEED",   PILOT_SPEED_DEFAULT),
 
+    // @Param: PILOT_TRIM_RATE
+    // @DisplayName: Pilot roll and pitch trim rate
+    // @Description: The rate of rotation requested by the roll and pitch trim buttons while they are held. The buttons are momentary, the vehicle rotates while a button is held and holds the attitude it reached when the button is released. Rotation is not limited, so the vehicle can be rolled or pitched inverted.
+    // @Units: deg/s
+    // @Range: 5 180
+    // @Increment: 5
+    // @User: Standard
+    GSCALAR(pilot_trim_rate,     "PILOT_TRIM_RATE",   PILOT_TRIM_RATE_DEFAULT),
+
     // @Param: PILOT_ACCEL_Z
     // @DisplayName: Pilot vertical acceleration
     // @Description: The vertical acceleration used when pilot is controlling the altitude

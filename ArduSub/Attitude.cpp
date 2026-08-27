@@ -40,6 +40,51 @@ float Sub::get_pilot_desired_yaw_rate(int16_t stick_angle) const
     return stick_angle * g.acro_yaw_p;
 }
 
+// the roll and pitch trim buttons are momentary, they rotate the vehicle while held. The button
+// state is only rebuilt when the pilot sends input, so an unheard pilot must not keep us rotating
+float Sub::get_pilot_trim_rate_cds(int8_t direction) const
+{
+    if (failsafe.pilot_input || AP_HAL::millis() - last_trim_button_ms > PILOT_TRIM_BUTTON_TIMEOUT_MS) {
+        return 0.0f;
+    }
+    return direction * g.pilot_trim_rate * 100.0f;
+}
+
+// returns the roll rate requested by the trim buttons, in centi-degrees per second
+float Sub::get_pilot_trim_roll_rate_cds() const
+{
+    return get_pilot_trim_rate_cds(pilot_trim_roll_dir);
+}
+
+// returns the pitch rate requested by the trim buttons, in centi-degrees per second
+float Sub::get_pilot_trim_pitch_rate_cds() const
+{
+    return get_pilot_trim_rate_cds(pilot_trim_pitch_dir);
+}
+
+// control_pilot_attitude - hold the pilot's attitude target, rotating it while the pilot asks for
+// rotation. The target is advanced by the demanded body-frame rate rather than built from euler
+// angles, so roll and pitch are not limited: the pilot may rotate through vertical, and past it,
+// and the attitude reached when the demand stops is the attitude that is then held
+void Sub::control_pilot_attitude(float target_yaw_rate_cds)
+{
+    // pick the current attitude up as the target when it has not been tracked, otherwise a mode
+    // that leaves the target behind, such as manual, would snap the vehicle when it is left
+    if (!attitude_hold_active) {
+        attitude_control.reset_target_and_rate();
+        attitude_hold_active = true;
+    }
+
+    // the roll and pitch sticks request rotation at the same rate as the trim buttons, so that a
+    // mode using them behaves the same way as the buttons do
+    const float roll_rate_cds = get_pilot_trim_roll_rate_cds()
+                                + channel_roll->norm_input_dz() * g.pilot_trim_rate * 100.0f;
+    const float pitch_rate_cds = get_pilot_trim_pitch_rate_cds()
+                                 + channel_pitch->norm_input_dz() * g.pilot_trim_rate * 100.0f;
+
+    attitude_control.input_rate_bf_roll_pitch_yaw_cds(roll_rate_cds, pitch_rate_cds, target_yaw_rate_cds);
+}
+
 // check for ekf yaw reset and adjust target heading
 void Sub::check_ekf_yaw_reset()
 {

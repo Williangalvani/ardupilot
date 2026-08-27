@@ -294,6 +294,12 @@ private:
     // Flag indicating if we are currently controlling Pitch and Roll instead of forward/lateral
     bool roll_pitch_flag = false;
 
+    // Direction, -1, 0 or 1, the momentary roll and pitch trim buttons are currently rotating towards,
+    // rebuilt from the buttons held on each pilot input, so it is only valid while it is fresh
+    int8_t pilot_trim_roll_dir;
+    int8_t pilot_trim_pitch_dir;
+    uint32_t last_trim_button_ms;
+
     // 3D Location vectors
     // Current location of the Sub (altitude is relative to home)
     Location current_loc;
@@ -374,8 +380,10 @@ private:
     // setup the var_info table
     AP_Param param_loader;
 
-    float last_pilot_heading_rad;
-    uint32_t last_pilot_yaw_input_ms;
+    // true while the attitude controller's target is the pilot's, and so may be rotated by the
+    // pilot's rate demands rather than picked up afresh from the vehicle's current attitude
+    bool attitude_hold_active;
+
     uint32_t fs_terrain_recover_start_ms;
 
     static const AP_Scheduler::Task scheduler_tasks[];
@@ -396,6 +404,10 @@ private:
     float get_smoothing_gain();
     void get_pilot_desired_lean_angles(float roll_in, float pitch_in, float &roll_out, float &pitch_out, float angle_max);
     float get_pilot_desired_yaw_rate(int16_t stick_angle) const;
+    float get_pilot_trim_rate_cds(int8_t direction) const;
+    float get_pilot_trim_roll_rate_cds() const;
+    float get_pilot_trim_pitch_rate_cds() const;
+    void control_pilot_attitude(float target_yaw_rate_cds);
     void check_ekf_yaw_reset();
     float get_roi_yaw();
     float get_look_ahead_yaw();
