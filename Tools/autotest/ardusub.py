@@ -1575,6 +1575,87 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
 
         self.disarm_vehicle()
 
+    def StabRollMom(self):
+        """Test STAB_ROLL_MOM rights the vehicle in roll after the sticks are released.
+        With the parameter at zero the roll that was reached is held. With it set, roll
+        returns toward upright at a rate proportional to sin(roll)."""
+        self.customise_SITL_commandline(
+            [],
+            model="vectored_6dof",
+            defaults_filepath=self.model_defaults_filepath('vectored_6dof'),
+        )
+
+        self.set_parameters({
+            "PILOT_TRIM_RATE": 45,
+            "STAB_ROLL_MOM": 0,
+        })
+
+        self.dive(-10)
+        self.change_mode('ALT_HOLD')
+        self.delay_sim_time(2, reason="allow alt hold to settle")
+
+        def wrap_180(deg):
+            return (deg + 180.0) % 360.0 - 180.0
+
+        def current_roll_deg():
+            return degrees(self.assert_receive_message('ATTITUDE').roll)
+
+        def roll_to(target_deg, accuracy_deg=10):
+            tstart = self.get_sim_time()
+            held_pwm = None
+            for demand_pwm, tolerance_deg in [(400, 30), (150, 10), (80, 3)]:
+                while True:
+                    error = wrap_180(target_deg - current_roll_deg())
+                    if abs(error) < tolerance_deg:
+                        break
+                    if self.get_sim_time_cached() - tstart > 60:
+                        raise NotAchievedException(
+                            "Vehicle would not roll to %d degrees, stopped %.0f degrees away"
+                            % (target_deg, error))
+                    wanted_pwm = 1500 + (demand_pwm if error > 0 else -demand_pwm)
+                    if wanted_pwm != held_pwm:
+                        self.set_rc(Joystick.Roll, wanted_pwm)
+                        held_pwm = wanted_pwm
+            self.set_rc(Joystick.Roll, 1500)
+            self.delay_sim_time(5, reason="allow the attitude to settle")
+            reached = current_roll_deg()
+            self.progress("Rolled to %.0f degrees, wanted %d" % (reached, target_deg))
+            if abs(wrap_180(reached - target_deg)) > accuracy_deg:
+                raise NotAchievedException(
+                    "Expected %d degrees of roll to be held, settled at %.0f" % (target_deg, reached))
+
+        lean_deg = 60
+
+        self.start_subtest("With STAB_ROLL_MOM at zero the rolled attitude is held")
+        roll_to(lean_deg)
+        self.delay_sim_time(8, reason="prove the roll is held without a righting moment")
+        held = current_roll_deg()
+        self.progress("Roll after 8s with STAB_ROLL_MOM=0 is %.0f degrees" % held)
+        if abs(wrap_180(held - lean_deg)) > 15:
+            raise NotAchievedException(
+                "Expected roll to stay near %d degrees with STAB_ROLL_MOM=0, it was %.0f"
+                % (lean_deg, held))
+
+        self.start_subtest("STAB_ROLL_MOM rights the vehicle toward upright")
+        self.set_parameter("STAB_ROLL_MOM", 45)
+        tstart = self.get_sim_time()
+        while True:
+            roll = current_roll_deg()
+            if abs(wrap_180(roll)) < 10:
+                self.progress("Righted to %.0f degrees" % roll)
+                break
+            if self.get_sim_time_cached() - tstart > 20:
+                raise NotAchievedException(
+                    "STAB_ROLL_MOM did not right the vehicle, roll still %.0f degrees" % roll)
+
+        self.delay_sim_time(3, reason="confirm it stays upright")
+        settled = current_roll_deg()
+        if abs(wrap_180(settled)) > 10:
+            raise NotAchievedException(
+                "Expected to remain upright after righting, roll was %.0f degrees" % settled)
+
+        self.disarm_vehicle()
+
     def EarthFrameSticks(self):
         """Test that the translation sticks are split against gravity in the depth holding modes.
         With the PILOT_OPTIONS EarthFrameTranslation bit set the share of the stick demand that
@@ -2418,6 +2499,7 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
             self.AsymmetricThrustCoupling,
             self.MomentaryTrimButtons,
             self.AcroBalance,
+            self.StabRollMom,
             self.EarthFrameSticks,
             self.EarthFrameVerticalResponse,
             self.GPSForYaw,
