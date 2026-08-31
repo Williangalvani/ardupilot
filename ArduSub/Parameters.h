@@ -252,6 +252,7 @@ public:
         k_param_failsafe_throttle_value,
         k_param_pilot_trim_rate,
         k_param_pilot_options,
+        k_param_stab_roll_mom,
         k_param_vehicle = 257, // vehicle common block of parameters
         k_param__gcs = 258,
     };
@@ -291,6 +292,7 @@ public:
     AP_Int16        pilot_accel_z;              // vertical acceleration the pilot may request
     AP_Int16        pilot_trim_rate;            // roll and pitch rate the trim buttons request while held
     AP_Int16        pilot_options;              // bitmask of Sub::PilotOptions
+    AP_Float        stab_roll_mom;              // righting roll rate, deg/s at 90 degrees of roll
 
     // Throttle
     //
