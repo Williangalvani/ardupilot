@@ -62,6 +62,18 @@ float Sub::get_pilot_trim_pitch_rate_cds() const
     return get_pilot_trim_rate_cds(pilot_trim_pitch_dir);
 }
 
+// righting roll rate from STAB_ROLL_MOM. Earth up in body axes has its Y
+// component equal to -sin(roll) for a pure roll, so the demand is zero when
+// upright, full STAB_ROLL_MOM at 90 degrees, and zero again when inverted
+float Sub::get_stab_roll_mom_cds() const
+{
+    if (!is_positive(g.stab_roll_mom)) {
+        return 0.0f;
+    }
+    const Vector3f up_body = -ahrs.get_rotation_body_to_ned().c;
+    return g.stab_roll_mom * up_body.y * 100.0f;
+}
+
 // control_pilot_attitude - hold the pilot's attitude target, rotating it while the pilot asks for
 // rotation. The target is advanced by the demanded body-frame rate rather than built from euler
 // angles, so roll and pitch are not limited: the pilot may rotate through vertical, and past it,
@@ -78,7 +90,8 @@ void Sub::control_pilot_attitude(float target_yaw_rate_cds)
     // the roll and pitch sticks request rotation at the same rate as the trim buttons, so that a
     // mode using them behaves the same way as the buttons do
     const float roll_rate_cds = get_pilot_trim_roll_rate_cds()
-                                + channel_roll->norm_input_dz() * g.pilot_trim_rate * 100.0f;
+                                + channel_roll->norm_input_dz() * g.pilot_trim_rate * 100.0f
+                                + get_stab_roll_mom_cds();
     const float pitch_rate_cds = get_pilot_trim_pitch_rate_cds()
                                  + channel_pitch->norm_input_dz() * g.pilot_trim_rate * 100.0f;
 

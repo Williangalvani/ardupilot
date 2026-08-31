@@ -265,6 +265,15 @@ const AP_Param::Info Sub::var_info[] = {
     // @User: Standard
     GSCALAR(pilot_options,     "PILOT_OPTIONS",   0),
 
+    // @Param: STAB_ROLL_MOM
+    // @DisplayName: Stabilise roll righting rate
+    // @Description: Body-frame roll rate that pulls the vehicle upright in the stabilised modes. The demand is proportional to the lean of the vehicle's right axis from level, so it is zero when upright, STAB_ROLL_MOM at 90 degrees of roll, and zero again when inverted. 0 disables the righting and the vehicle holds the roll it is left in.
+    // @Units: deg/s
+    // @Range: 0 180
+    // @Increment: 1
+    // @User: Standard
+    GSCALAR(stab_roll_mom,     "STAB_ROLL_MOM",   0),
+
     // @Param: PILOT_ACCEL_Z
     // @DisplayName: Pilot vertical acceleration
     // @Description: The vertical acceleration used when pilot is controlling the altitude

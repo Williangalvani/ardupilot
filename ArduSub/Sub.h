@@ -412,6 +412,7 @@ private:
     float get_pilot_trim_rate_cds(int8_t direction) const;
     float get_pilot_trim_roll_rate_cds() const;
     float get_pilot_trim_pitch_rate_cds() const;
+    float get_stab_roll_mom_cds() const;
     void control_pilot_attitude(float target_yaw_rate_cds);
     void check_ekf_yaw_reset();
     float get_roi_yaw();
