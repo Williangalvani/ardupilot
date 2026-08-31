@@ -1601,6 +1601,128 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
 
         self.disarm_vehicle()
 
+    def EarthFrameVerticalResponse(self):
+        """Compare the earth-up climb from the same stick deflection while upright,
+        rolled 90 degrees, and inverted. PILOT_OPTIONS EarthFrameTranslation maps
+        whichever stick points along earth up onto the depth target. The three
+        translation sticks share a scale, so the same 400 us offset from centre
+        must produce the same climb at each attitude."""
+        self.customise_SITL_commandline(
+            [],
+            model="vectored_6dof",
+            defaults_filepath=self.model_defaults_filepath('vectored_6dof'),
+        )
+
+        self.set_parameters({
+            "PILOT_TRIM_RATE": 45,
+            "PILOT_OPTIONS": 1,
+        })
+
+        test_depth_m = -25
+        stick_offset_us = 400
+        hold_s = 5
+        self.dive(test_depth_m)
+        self.change_mode('ALT_HOLD')
+        self.delay_sim_time(5, reason="allow alt hold to settle")
+
+        def wrap_180(deg):
+            return (deg + 180.0) % 360.0 - 180.0
+
+        def roll_to(target_deg, accuracy_deg=10):
+            tstart = self.get_sim_time()
+            held_pwm = None
+            for demand_pwm, tolerance_deg in [(400, 30), (150, 10), (80, 3)]:
+                while True:
+                    error = wrap_180(target_deg - degrees(self.assert_receive_message('ATTITUDE').roll))
+                    if abs(error) < tolerance_deg:
+                        break
+                    if self.get_sim_time_cached() - tstart > 180:
+                        raise NotAchievedException(
+                            "Vehicle would not roll to %d degrees, stopped %.0f degrees away"
+                            % (target_deg, error))
+                    wanted_pwm = 1500 + (demand_pwm if error > 0 else -demand_pwm)
+                    if wanted_pwm != held_pwm:
+                        self.set_rc(Joystick.Roll, wanted_pwm)
+                        held_pwm = wanted_pwm
+            self.set_rc(Joystick.Roll, 1500)
+            self.delay_sim_time(10, reason="allow the attitude and the depth to settle")
+            reached = degrees(self.assert_receive_message('ATTITUDE').roll)
+            self.progress("Rolled to %.0f degrees, wanted %d" % (reached, target_deg))
+            if abs(wrap_180(reached - target_deg)) > accuracy_deg:
+                raise NotAchievedException(
+                    "Expected %d degrees of roll to be held, settled at %.0f" % (target_deg, reached))
+
+        def reset_depth():
+            self.dive(test_depth_m, mode='ALT_HOLD')
+            self.delay_sim_time(5, reason="allow alt hold to settle")
+
+        def climb_response(channel, pwm):
+            """Hold a translation stick and report metres risen and mean climb rate in m/s.
+            LOCAL_POSITION_NED z and vz are positive down."""
+            start = self.assert_receive_message('LOCAL_POSITION_NED')
+            att = self.assert_receive_message('ATTITUDE')
+            self.set_rc(channel, pwm)
+            vz_sum = 0.0
+            n = 0
+            tstart = self.get_sim_time()
+            while self.get_sim_time_cached() - tstart < hold_s:
+                pos = self.assert_receive_message('LOCAL_POSITION_NED')
+                vz_sum += -pos.vz
+                n += 1
+            end = self.assert_receive_message('LOCAL_POSITION_NED')
+            self.set_rc(channel, 1500)
+            self.delay_sim_time(5, reason="allow the vehicle to settle")
+            rise_m = start.z - end.z
+            mean_climb_ms = vz_sum / n if n else 0.0
+            return rise_m, mean_climb_ms, degrees(att.roll)
+
+        cases = [
+            ("upright", 0, Joystick.Throttle, 1500 + stick_offset_us),
+            # rolled right, body right points earth down, so left lateral climbs
+            ("rolled 90", 90, Joystick.Lateral, 1500 - stick_offset_us),
+            # inverted, body down points earth up, so throttle down climbs
+            ("upside down", 180, Joystick.Throttle, 1500 - stick_offset_us),
+        ]
+
+        results = []
+        for name, roll_deg, channel, pwm in cases:
+            self.start_subtest("Earth-up climb %s" % name)
+            # dive() drives the throttle stick, so depth is only reset while upright
+            roll_to(0, accuracy_deg=20)
+            reset_depth()
+            roll_to(roll_deg, accuracy_deg=15)
+            rise_m, mean_climb_ms, roll_held = climb_response(channel, pwm)
+            self.progress(
+                "%s (roll %.0f deg, pwm %d): rose %.2f m in %ds, mean climb %.2f m/s"
+                % (name, roll_held, pwm, rise_m, hold_s, mean_climb_ms))
+            results.append((name, rise_m, mean_climb_ms, roll_held))
+
+        roll_to(0, accuracy_deg=20)
+
+        upright_rise = results[0][1]
+        upright_climb = results[0][2]
+        if upright_rise < 3.0:
+            raise NotAchievedException(
+                "Upright climb was only %.2f m, too small to compare against" % upright_rise)
+
+        for name, rise_m, mean_climb_ms, roll_held in results:
+            if rise_m < 3.0:
+                raise NotAchievedException(
+                    "%s: expected a climb from the earth-up stick, rose only %.2f m" % (name, rise_m))
+            ratio = rise_m / upright_rise
+            self.progress("%s climb is %.0f%% of upright (%.2f m vs %.2f m, %.2f m/s vs %.2f m/s)"
+                          % (name, 100.0 * ratio, rise_m, upright_rise, mean_climb_ms, upright_climb))
+            if ratio < 0.95 or ratio > 1.05:
+                raise NotAchievedException(
+                    "%s climb (%.2f m) was not within 5%% of upright (%.2f m)"
+                    % (name, rise_m, upright_rise))
+            if abs(mean_climb_ms - upright_climb) > 0.1:
+                raise NotAchievedException(
+                    "%s mean climb %.2f m/s was not within 0.1 m/s of upright %.2f m/s"
+                    % (name, mean_climb_ms, upright_climb))
+
+        self.disarm_vehicle()
+
     def SurfaceSensorless(self):
         """Test surface mode with sensorless thrust"""
         # this drives the throttle down and waits to arrive at 9.5m, so
@@ -2198,6 +2320,7 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
             self.AsymmetricThrustCoupling,
             self.MomentaryTrimButtons,
             self.EarthFrameSticks,
+            self.EarthFrameVerticalResponse,
             self.GPSForYaw,
             self.WaterDepth,
             self.VisoForYaw,
