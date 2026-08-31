@@ -179,7 +179,9 @@ float Sub::climb_rate_from_throttle_norm(float throttle_norm) const
 }
 
 // get_pilot_horizontal_norm - pilot's forward or lateral input as -1 ~ +1, with
-// the same deadzone the throttle stick uses
+// the same deadzone the throttle stick uses. The leftover travel after the
+// deadzone is stretched to full scale, matching get_pilot_throttle_norm(), so
+// a full stick is always ±1 and the same PWM offset produces the same demand
 float Sub::get_pilot_horizontal_norm(RC_Channel *channel) const
 {
     if (failsafe.pilot_input) {
@@ -187,23 +189,33 @@ float Sub::get_pilot_horizontal_norm(RC_Channel *channel) const
     }
 
     // forward and lateral sticks have center trim, unlike throttle
-    auto control = channel->norm_input();
+    const float control = channel->norm_input();
 
-    // normalize deadzone
-    auto dz = (float)g.throttle_deadzone * 2.0f / (float)(channel->get_radio_max() - channel->get_radio_min());
-    auto deadband_top = dz * gain;
-    auto deadband_bottom = -dz * gain;
-
-    if (control < deadband_bottom) {
-        // below the deadband
-        return control - deadband_bottom;
-    } else if (control > deadband_top) {
-        // above the deadband
-        return control - deadband_top;
-    } else {
-        // must be in the deadband
+    // THR_DZ is in PWM microseconds on a 0-1000 throttle range. Put it in the
+    // same ±1 units norm_input() uses
+    const float radio_range = channel->get_radio_max() - channel->get_radio_min();
+    if (radio_range < 1.0f) {
         return 0;
     }
+    const float dz = (float)g.throttle_deadzone * 2.0f / radio_range;
+    const float deadband_top = dz * gain;
+    const float deadband_bottom = -dz * gain;
+
+    if (control < deadband_bottom) {
+        const float remaining = 1.0f + deadband_bottom;
+        if (!is_positive(remaining)) {
+            return -1.0f;
+        }
+        return (control - deadband_bottom) / remaining;
+    }
+    if (control > deadband_top) {
+        const float remaining = 1.0f - deadband_top;
+        if (!is_positive(remaining)) {
+            return 1.0f;
+        }
+        return (control - deadband_top) / remaining;
+    }
+    return 0.0f;
 }
 
 // behavior is similar to Sub::get_pilot_desired_climb_rate
