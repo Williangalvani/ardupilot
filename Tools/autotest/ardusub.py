@@ -1477,6 +1477,104 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
 
         self.disarm_vehicle()
 
+    def AcroBalance(self):
+        """ACRO_TRAINER and ACRO_BAL_ROLL / ACRO_BAL_PITCH pull the vehicle back to
+        level in ACRO. With the trainer off, or the balance gains zero, a bank is held."""
+        self.customise_SITL_commandline(
+            [],
+            model="vectored_6dof",
+            defaults_filepath=self.model_defaults_filepath('vectored_6dof'),
+        )
+
+        # buoyancy would right the vehicle on its own and hide whether the parameters work
+        self.set_parameters({
+            "SIM_BUOYANCY": 0,
+            "ACRO_TRAINER": 0,
+            "ACRO_BAL_ROLL": 0,
+            "ACRO_BAL_PITCH": 0,
+        })
+
+        self.dive(-10)
+        self.change_mode('ACRO')
+        self.set_rc(Joystick.Throttle, 1500)
+
+        def bank(channel, pwm, min_deg):
+            self.set_rc(channel, pwm)
+            tstart = self.get_sim_time()
+            while True:
+                att = self.assert_receive_message('ATTITUDE')
+                angle = degrees(att.roll if channel == Joystick.Roll else att.pitch)
+                if abs(angle) >= min_deg:
+                    self.set_rc(channel, 1500)
+                    return angle
+                if self.get_sim_time_cached() - tstart > 20:
+                    raise NotAchievedException(
+                        "Would not reach %d degrees of bank, stopped at %.0f" % (min_deg, angle))
+
+        def held_angle(channel, seconds=8):
+            tstart = self.get_sim_time()
+            last = None
+            while self.get_sim_time_cached() - tstart < seconds:
+                att = self.assert_receive_message('ATTITUDE')
+                last = degrees(att.roll if channel == Joystick.Roll else att.pitch)
+            return last
+
+        self.start_subtest("Trainer off holds a roll")
+        bank(Joystick.Roll, 1700, 35)
+        rolled = held_angle(Joystick.Roll)
+        self.progress("Held %.0f degrees of roll with the trainer off" % rolled)
+        if abs(rolled) < 25:
+            raise NotAchievedException(
+                "Expected a held roll with ACRO_TRAINER 0, settled at %.0f degrees" % rolled)
+
+        self.start_subtest("ACRO_BAL_ROLL levels the vehicle")
+        self.set_parameters({
+            "ACRO_TRAINER": 1,
+            "ACRO_BAL_ROLL": 1,
+        })
+        self.wait_roll(0, 10, timeout=20)
+        self.progress("Returned to level with ACRO_BAL_ROLL")
+
+        self.start_subtest("Zero ACRO_BAL_ROLL holds a roll even with the trainer on")
+        self.set_parameter("ACRO_BAL_ROLL", 0)
+        bank(Joystick.Roll, 1700, 35)
+        rolled = held_angle(Joystick.Roll)
+        self.progress("Held %.0f degrees of roll with ACRO_BAL_ROLL 0" % rolled)
+        if abs(rolled) < 25:
+            raise NotAchievedException(
+                "Expected a held roll with ACRO_BAL_ROLL 0, settled at %.0f degrees" % rolled)
+
+        self.start_subtest("Trainer off holds a pitch")
+        self.set_parameters({
+            "ACRO_TRAINER": 1,
+            "ACRO_BAL_ROLL": 1,
+            "ACRO_BAL_PITCH": 1,
+        })
+        self.wait_roll(0, 10, timeout=20)
+        self.wait_pitch(0, 10, timeout=20)
+        self.set_parameters({
+            "ACRO_TRAINER": 0,
+            "ACRO_BAL_ROLL": 0,
+            "ACRO_BAL_PITCH": 0,
+        })
+        self.delay_sim_time(2, reason="stop the leftover rate")
+        bank(Joystick.Pitch, 1700, 35)
+        pitched = held_angle(Joystick.Pitch)
+        self.progress("Held %.0f degrees of pitch with the trainer off" % pitched)
+        if abs(pitched) < 25:
+            raise NotAchievedException(
+                "Expected a held pitch with ACRO_TRAINER 0, settled at %.0f degrees" % pitched)
+
+        self.start_subtest("ACRO_BAL_PITCH levels the vehicle")
+        self.set_parameters({
+            "ACRO_TRAINER": 1,
+            "ACRO_BAL_PITCH": 1,
+        })
+        self.wait_pitch(0, 10, timeout=20)
+        self.progress("Returned to level with ACRO_BAL_PITCH")
+
+        self.disarm_vehicle()
+
     def EarthFrameSticks(self):
         """Test that the translation sticks are split against gravity in the depth holding modes.
         With the PILOT_OPTIONS EarthFrameTranslation bit set the share of the stick demand that
@@ -2319,6 +2417,7 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
             self.SurfaceSensorless,
             self.AsymmetricThrustCoupling,
             self.MomentaryTrimButtons,
+            self.AcroBalance,
             self.EarthFrameSticks,
             self.EarthFrameVerticalResponse,
             self.GPSForYaw,
