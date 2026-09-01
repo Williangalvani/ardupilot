@@ -225,6 +225,75 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
         self.watch_altitude_maintained()
         self.disarm_vehicle()
 
+    def SurfaceThrottleCap(self):
+        """Check the surface throttle cap does not wind the depth target away from the vehicle"""
+
+        self.customise_SITL_commandline(
+            [],
+            model="vectored_6dof",
+            defaults_filepath=self.model_defaults_filepath('vectored_6dof'),
+        )
+
+        self.dive(-3, mode='ALT_HOLD')
+
+        # SURFACE_DEPTH is the shallowest the cap ramp can start from, so the cap is
+        # fully on at 1 m and gone by 2 m, and the negative buoyancy stops the vehicle
+        # coasting up through the capped band.
+        #
+        # The climb is asked for gently and the gains are soft, which keeps the demand
+        # short of _throttle_thrust_max. That clamp reports a limit of its own, so a
+        # hard climb reaches it within a second and hides the missing report entirely
+        self.set_parameters({
+            "SURFACE_DEPTH": -100,
+            "SURFACE_MAX_THR": 0,
+            "SIM_BUOYANCY": -10,
+            "PILOT_SPEED_UP": 20,
+            "PSC_D_POS_P": 1.0,
+            "PSC_D_VEL_P": 3.0,
+            "PSC_D_ACC_P": 0.05,
+            "PSC_D_ACC_I": 0.01,
+            "PSC_D_ACC_IMAX": 0.1,
+        })
+
+        # ask to climb for longer than the vehicle can actually climb. It runs out of
+        # thrust inside the capped band and stops, but the stick keeps asking for more
+        self.set_rc(Joystick.Throttle, 1900)
+        self.delay_sim_time(20, reason="vehicle to run out of throttle against the cap")
+
+        settled_alt = self.get_altitude(relative=False)
+        self.progress(f"Settled against the cap at {settled_alt:.2f} m")
+        if settled_alt > -0.5:
+            raise NotAchievedException(
+                f"Vehicle climbed past the capped band, cap never bit (alt {settled_alt:.2f} m)")
+
+        # the vehicle is stuck, so the depth target must stay with it rather than
+        # marching off at the pilot's demanded climb rate
+        tstart = self.get_sim_time()
+        self.delay_sim_time(15, reason="depth target to run away if the cap is unreported")
+        self.set_rc(Joystick.Throttle, 1500)
+        self.disarm_vehicle()
+
+        worst_runaway = 0.0
+        worst_demand = 0.0
+        dfreader = self.dfreader_for_current_onboard_log()
+        while True:
+            m = dfreader.recv_match(type='CTUN')
+            if m is None:
+                break
+            if m.TimeUS * 1.0e-6 < tstart:
+                continue
+            worst_runaway = max(worst_runaway, m.DAlt - m.Alt)
+            worst_demand = max(worst_demand, m.ThO)
+
+        self.progress(f"Depth target ran {worst_runaway:.2f} m above the vehicle")
+        self.progress(f"Peak throttle demand {worst_demand:.2f}, full throttle is 1.0")
+        if worst_runaway > 0.3:
+            raise NotAchievedException(
+                f"Depth target wound away from the vehicle by {worst_runaway:.2f} m, want at most 0.3 m")
+        if worst_demand > 0.85:
+            raise NotAchievedException(
+                f"Throttle demand wound up to {worst_demand:.2f} with most of it unusable, want at most 0.85")
+
     def RngfndQuality(self):
         """Check lua Range Finder quality information flow"""
         self.context_collect('STATUSTEXT')
@@ -2499,6 +2568,7 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
             self.AsymmetricThrustCoupling,
             self.MomentaryTrimButtons,
             self.AcroBalance,
+            self.SurfaceThrottleCap,
             self.StabRollMom,
             self.EarthFrameSticks,
             self.EarthFrameVerticalResponse,
