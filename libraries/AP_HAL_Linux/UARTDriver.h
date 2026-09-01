@@ -58,6 +58,10 @@ public:
 
     virtual uint32_t get_baud_rate() const override { return _baudrate; }
 
+#if HAL_UART_STATS_ENABLED
+    void uart_info(ExpandingString &str, StatsTracker &stats, const uint32_t dt_ms) override;
+#endif
+
 private:
     AP_HAL::OwnPtr<SerialDevice> _device;
     bool _console;
@@ -99,6 +103,25 @@ protected:
     uint32_t _available() override;
     size_t _write(const uint8_t *buffer, size_t size) override;
     ssize_t _read(uint8_t *buffer, uint16_t count) override WARN_IF_UNUSED;
+
+#if HAL_UART_STATS_ENABLED
+    uint32_t get_total_tx_bytes() const override { return _tx_stats_bytes; }
+    uint32_t get_total_rx_bytes() const override { return _rx_stats_bytes; }
+    uint32_t get_total_dropped_rx_bytes() const override { return _rx_stats_dropped_bytes; }
+
+    void _update_serial_error_stats();
+
+    uint32_t _tx_stats_bytes;
+    uint32_t _rx_stats_bytes;
+    uint32_t _rx_stats_dropped_bytes;
+    uint32_t _rx_stats_framing_errors;
+    uint32_t _rx_stats_overrun_errors;
+    uint32_t _rx_stats_parity_errors;
+    uint32_t _rx_stats_buf_overrun_errors;
+    uint32_t _last_icount_overrun;
+    uint32_t _last_icount_buf_overrun;
+    uint32_t _last_icount_ms;
+#endif
 };
 
 }

@@ -21,10 +21,20 @@ public:
     }
     virtual void set_parity(int v) override;
 
+#if HAL_UART_STATS_ENABLED
+    bool get_serial_error_counters(uint32_t &framing,
+                                   uint32_t &overrun,
+                                   uint32_t &parity,
+                                   uint32_t &buf_overrun) override;
+#endif
+
 private:
     void _disable_crlf();
     AP_HAL::UARTDriver::flow_control _flow_control = AP_HAL::UARTDriver::flow_control::FLOW_CONTROL_DISABLE;
 
     int _fd = -1;
     const char *_device_path;
+#if HAL_UART_STATS_ENABLED
+    bool _icount_unsupported;
+#endif
 };

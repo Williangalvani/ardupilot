@@ -18,6 +18,7 @@
 #include <unistd.h>
 
 #include <AP_HAL/AP_HAL.h>
+#include <AP_Common/ExpandingString.h>
 
 #include "ConsoleDevice.h"
 #include "TCPServerDevice.h"
@@ -90,6 +91,9 @@ void UARTDriver::_begin(uint32_t b, uint16_t rxS, uint16_t txS)
     _allocate_buffers(rxS, txS);
 
     if (clear_buffers) {
+#if HAL_UART_STATS_ENABLED
+        _rx_stats_dropped_bytes += _readbuf.available();
+#endif
         _readbuf.clear();
         _writebuf.clear();
     }
@@ -276,6 +280,9 @@ bool UARTDriver::_discard_input()
     if (!_initialised) {
         return false;
     }
+#if HAL_UART_STATS_ENABLED
+    _rx_stats_dropped_bytes += _readbuf.available();
+#endif
     _readbuf.clear();
     return true;
 }
@@ -350,8 +357,12 @@ bool UARTDriver::_write_pending_bytes(void)
             uint8_t tmpbuf[n];
             _writebuf.peekbytes(tmpbuf, n);
             ret = _write_fd(tmpbuf, n);
-            if (ret > 0)
+            if (ret > 0) {
                 _writebuf.advance(ret);
+#if HAL_UART_STATS_ENABLED
+                _tx_stats_bytes += unsigned(ret);
+#endif
+            }
         } else {
             ByteBuffer::IoVec vec[2];
             const auto n_vec = _writebuf.peekiovec(vec, n);
@@ -360,6 +371,11 @@ bool UARTDriver::_write_pending_bytes(void)
                 if (ret < 0) {
                     break;
                 }
+#if HAL_UART_STATS_ENABLED
+                if (ret > 0) {
+                    _tx_stats_bytes += unsigned(ret);
+                }
+#endif
                 _writebuf.advance(ret);
 
                 /* We wrote less than we asked for, stop */
@@ -400,6 +416,11 @@ void UARTDriver::_timer_tick(void)
             break;
         }
         _readbuf.commit((unsigned)ret);
+#if HAL_UART_STATS_ENABLED
+        if (ret > 0) {
+            _rx_stats_bytes += unsigned(ret);
+        }
+#endif
 
         // update receive timestamp
         _receive_timestamp[_receive_timestamp_idx^1] = AP_HAL::micros64();
@@ -411,8 +432,81 @@ void UARTDriver::_timer_tick(void)
         }
     }
 
+#if HAL_UART_STATS_ENABLED
+    /*
+      If the software RX buffer is full, drain the kernel so drops are
+      counted in UART.RxDp instead of silently filling the TTY until a
+      hardware overrun.
+     */
+    if (_readbuf.space() == 0) {
+        uint8_t discard[256];
+        uint8_t n_discard = 16;
+        while (n_discard--) {
+            ret = _read_fd(discard, sizeof(discard));
+            if (ret <= 0) {
+                break;
+            }
+            _rx_stats_bytes += unsigned(ret);
+            _rx_stats_dropped_bytes += unsigned(ret);
+        }
+    }
+
+    const uint32_t now_ms = AP_HAL::millis();
+    if (now_ms - _last_icount_ms >= 1000U) {
+        _last_icount_ms = now_ms;
+        _update_serial_error_stats();
+    }
+#endif
+
     _in_timer = false;
 }
+
+#if HAL_UART_STATS_ENABLED
+void UARTDriver::_update_serial_error_stats()
+{
+    if (!_device) {
+        return;
+    }
+
+    uint32_t framing = 0;
+    uint32_t overrun = 0;
+    uint32_t parity_err = 0;
+    uint32_t buf_overrun = 0;
+    if (!_device->get_serial_error_counters(framing, overrun, parity_err, buf_overrun)) {
+        return;
+    }
+
+    _rx_stats_dropped_bytes += (overrun - _last_icount_overrun) + (buf_overrun - _last_icount_buf_overrun);
+    _rx_stats_framing_errors = framing;
+    _rx_stats_overrun_errors = overrun;
+    _rx_stats_parity_errors = parity_err;
+    _rx_stats_buf_overrun_errors = buf_overrun;
+    _last_icount_overrun = overrun;
+    _last_icount_buf_overrun = buf_overrun;
+}
+
+void UARTDriver::uart_info(ExpandingString &str, StatsTracker &stats, const uint32_t dt_ms)
+{
+    _update_serial_error_stats();
+
+    const uint32_t tx_bytes = stats.tx.update(_tx_stats_bytes);
+    const uint32_t rx_bytes = stats.rx.update(_rx_stats_bytes);
+    const uint32_t rx_dropped_bytes = stats.rx_dropped.update(_rx_stats_dropped_bytes);
+    const uint32_t dt = (dt_ms == 0) ? 1 : dt_ms;
+
+    str.printf("TX =%8u RX =%8u TXBD=%6u RXBD=%6u RXDRP=%8u FE=%u OE=%u PE=%u BOE=%u FlowCtrl=%u\n",
+               unsigned(tx_bytes),
+               unsigned(rx_bytes),
+               unsigned((tx_bytes * 10000) / dt),
+               unsigned((rx_bytes * 10000) / dt),
+               unsigned(rx_dropped_bytes),
+               unsigned(_rx_stats_framing_errors),
+               unsigned(_rx_stats_overrun_errors),
+               unsigned(_rx_stats_parity_errors),
+               unsigned(_rx_stats_buf_overrun_errors),
+               unsigned(get_flow_control()));
+}
+#endif
 
 void UARTDriver::configure_parity(uint8_t v) {
     UARTDriver::parity = v;

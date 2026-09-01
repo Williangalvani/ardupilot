@@ -23,4 +23,15 @@ public:
 
     /* Depends on lower level to implement, most devices are fine with defaults */
     virtual void set_parity(int v) { }
+
+#if HAL_UART_STATS_ENABLED
+    // Cumulative kernel TTY error counters. Returns false if unsupported.
+    virtual bool get_serial_error_counters(uint32_t &framing,
+                                           uint32_t &overrun,
+                                           uint32_t &parity,
+                                           uint32_t &buf_overrun)
+    {
+        return false;
+    }
+#endif
 };

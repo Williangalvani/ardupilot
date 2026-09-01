@@ -95,6 +95,13 @@ public:
     // fills data with random values of requested size
     bool get_random_vals(uint8_t* data, size_t size) override;
 
+#if HAL_UART_STATS_ENABLED
+    void uart_info(ExpandingString &str) override;
+#if HAL_LOGGING_ENABLED
+    void uart_log() override;
+#endif
+#endif
+
 private:
 #if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_DISCO
     static ToneAlarm_Disco _toneAlarm;
@@ -109,6 +116,17 @@ private:
     const char *custom_storage_directory = nullptr;
     const char *custom_defaults = HAL_PARAM_DEFAULTS_PATH;
     static const char *_hw_names[UTIL_NUM_HARDWARES];
+
+#if HAL_UART_STATS_ENABLED
+    struct uart_stats {
+        AP_HAL::UARTDriver::StatsTracker serial[AP_HAL::HAL::num_serial];
+        uint32_t last_ms;
+    };
+    uart_stats sys_uart_stats;
+#if HAL_LOGGING_ENABLED
+    uart_stats log_uart_stats;
+#endif
+#endif
 };
 
 }
