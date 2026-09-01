@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #include <AP_HAL/AP_HAL.h>
+#include <AP_Common/ExpandingString.h>
 
 #include "Heat_Pwm.h"
 #include "Util.h"
@@ -299,3 +300,37 @@ bool Util::parse_cpu_set(const char *str, cpu_set_t *cpu_set) const
 
     return true;
 }
+
+#if HAL_UART_STATS_ENABLED
+void Util::uart_info(ExpandingString &str)
+{
+    const uint32_t now_ms = AP_HAL::millis();
+    const uint32_t dt_ms = now_ms - sys_uart_stats.last_ms;
+    sys_uart_stats.last_ms = now_ms;
+
+    str.printf("UARTV1\n");
+    for (uint8_t i = 0; i < hal.num_serial; i++) {
+        auto *uart = hal.serial(i);
+        if (uart) {
+            str.printf("SERIAL%u ", i);
+            uart->uart_info(str, sys_uart_stats.serial[i], dt_ms);
+        }
+    }
+}
+
+#if HAL_LOGGING_ENABLED
+void Util::uart_log()
+{
+    const uint32_t now_ms = AP_HAL::millis();
+    const uint32_t dt_ms = now_ms - log_uart_stats.last_ms;
+    log_uart_stats.last_ms = now_ms;
+
+    for (uint8_t i = 0; i < hal.num_serial; i++) {
+        auto *uart = hal.serial(i);
+        if (uart) {
+            uart->log_stats(i, log_uart_stats.serial[i], dt_ms);
+        }
+    }
+}
+#endif // HAL_LOGGING_ENABLED
+#endif // HAL_UART_STATS_ENABLED

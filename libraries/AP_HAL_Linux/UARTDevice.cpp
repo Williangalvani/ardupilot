@@ -9,6 +9,8 @@
 #include <asm/termbits.h>
 #include <unistd.h>
 
+#include <linux/serial.h>
+
 #include <AP_HAL/AP_HAL.h>
 
 UARTDevice::UARTDevice(const char *device_path):
@@ -194,3 +196,32 @@ void UARTDevice::set_parity(int v)
         return;
     }
 }
+
+#if HAL_UART_STATS_ENABLED
+bool UARTDevice::get_serial_error_counters(uint32_t &framing,
+                                           uint32_t &overrun,
+                                           uint32_t &parity,
+                                           uint32_t &buf_overrun)
+{
+    if (_fd < 0 || _icount_unsupported) {
+        return false;
+    }
+
+#ifdef TIOCGICOUNT
+    struct serial_icounter_struct icount {};
+    if (ioctl(_fd, TIOCGICOUNT, &icount) != 0) {
+        _icount_unsupported = true;
+        return false;
+    }
+
+    framing = icount.frame;
+    overrun = icount.overrun;
+    parity = icount.parity;
+    buf_overrun = icount.buf_overrun;
+    return true;
+#else
+    _icount_unsupported = true;
+    return false;
+#endif
+}
+#endif
