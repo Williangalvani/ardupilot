@@ -109,21 +109,34 @@ AP_Baro_Backend *AP_Baro_MS5837::probe(AP_Baro &baro, AP_HAL::Device &dev)
     return _probe(baro, NEW_NOTHROW AP_Baro_MS5837(baro, dev));
 }
 
+/*
+  the 02BA and the 30BA are indistinguishable over the bus, so use the
+  pressure sensitivity coefficient as a proxy for the range: for the same
+  coefficient width, a higher sensitivity means the lower-range variant.
+  Threshold determined from datasheet example values and some sample sensors.
+
+  this has to be settled here rather than later in _init() because
+  AP_Baro_MS56XX::_init() stamps BARO_DEVID with devtype() once the PROM has
+  been read.
+ */
+bool AP_Baro_MS5837::_read_prom(uint16_t *prom)
+{
+    if (!_read_prom_5637(prom)) {
+        return false;
+    }
+    const uint16_t pressure_sensitivity = prom[1];
+    if (pressure_sensitivity > MS5837_30BA_02BA_SELECTION_THRESHOLD) {
+        _subtype = DEVTYPE_BARO_MS5837_02BA;
+    }
+    return true;
+}
+
 bool AP_Baro_MS5837::_init()
 {
     if (!AP_Baro_MS56XX::_init()) {
         return false;
     }
     _frontend.set_type(_instance, AP_Baro::BARO_TYPE_WATER);
-    // Use pressure sensitivity as a proxy for range determination
-    // High sensitivity for the same number size implies the lower-range sensor variant
-    // Threshold determined from datasheet example values and some sample sensors
-    uint16_t pressure_sensitivity = _cal_reg.c1;
-    if (pressure_sensitivity > MS5837_30BA_02BA_SELECTION_THRESHOLD) {
-        _subtype = DEVTYPE_BARO_MS5837_02BA;
-    } else {
-        _subtype = DEVTYPE_BARO_MS5837_30BA;
-    }
     return true;
 }
 #endif // AP_BARO_MS5837_ENABLED
@@ -557,10 +570,6 @@ void AP_Baro_MS5837::_calculate_5837_02ba() {
 
     // Update frontend with calculated values
     _copy_to_frontend(_instance, (float)pressure, (float)TEMP / 100);
-}
-
-AP_Baro_Backend::DevTypes AP_Baro_MS5837::devtype() const {
-    return _subtype;
 }
 
 #endif  // AP_BARO_MS5837_ENABLED

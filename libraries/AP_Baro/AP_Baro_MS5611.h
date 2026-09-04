@@ -149,14 +149,15 @@ public:
     static AP_Baro_Backend *probe(AP_Baro &baro, AP_HAL::Device &dev);
 protected:
     const char *name() const override { return "MS5837"; }
-    bool _read_prom(uint16_t *prom) override { return _read_prom_5637(prom); }
-    DevTypes devtype() const override;
+    bool _read_prom(uint16_t *prom) override;
+    DevTypes devtype() const override { return _subtype; }
     bool _init() override;
     void _calculate() override;
     void _calculate_5837_02ba();
     void _calculate_5837_30ba();
 
-    DevTypes _subtype;
+    // which variant we are talking to, narrowed down in _read_prom()
+    DevTypes _subtype = DEVTYPE_BARO_MS5837_30BA;
 };
 #endif  // AP_BARO_MS5837_ENABLED
 
