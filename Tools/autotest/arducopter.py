@@ -8846,6 +8846,77 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             (cam2_compid, 75, 80),
         ])
 
+    def poll_camera_settings(self):
+        '''request and return a CAMERA_SETTINGS message'''
+        self.drain_mav()
+        self.send_poll_message('CAMERA_SETTINGS')
+        return self.assert_receive_message('CAMERA_SETTINGS', timeout=5)
+
+    def measure_camera_zoom_focus_rates(self, duration=1):
+        '''return the zoom and focus rates in percent/second, measured over
+        duration seconds using the time_boot_ms in CAMERA_SETTINGS so that the
+        result does not depend on how promptly the commands were handled'''
+        first = self.poll_camera_settings()
+        self.delay_sim_time(duration, reason="camera zoom and focus to move")
+        second = self.poll_camera_settings()
+        dt = (second.time_boot_ms - first.time_boot_ms) * 0.001
+        if dt <= 0:
+            raise NotAchievedException("CAMERA_SETTINGS time_boot_ms did not advance")
+        return ((second.zoomLevel - first.zoomLevel) / dt,
+                (second.focusLevel - first.focusLevel) / dt)
+
+    def CameraServoZoomFocusSpeed(self):
+        '''test CAM1_ZOOM_SPEED and CAM1_FOCUS_SPEED set the servo camera zoom and focus rates'''
+        self.set_parameter("CAM1_TYPE", 1)   # Camera with servo trigger
+        self.reboot_sitl()  # needed for CAM1_TYPE to take effect
+
+        for (axis, speed, direction, start_pct) in [
+                ("zoom", 25, 1, 5),
+                ("zoom", 10, -1, 95),
+                ("focus", 30, 1, 5),
+                # 5%/s is the default, the rate the servo camera always used
+                # before these parameters existed
+                ("focus", 5, -1, 95),
+        ]:
+            self.start_subtest("%s at %u%%/s, direction %i" % (axis, speed, direction))
+            if axis == "zoom":
+                cmd = mavutil.mavlink.MAV_CMD_SET_CAMERA_ZOOM
+                pct_type = mavutil.mavlink.ZOOM_TYPE_RANGE
+                rate_type = mavutil.mavlink.ZOOM_TYPE_CONTINUOUS
+                self.set_parameter("CAM1_ZOOM_SPEED", speed)
+            else:
+                cmd = mavutil.mavlink.MAV_CMD_SET_CAMERA_FOCUS
+                pct_type = mavutil.mavlink.FOCUS_TYPE_RANGE
+                rate_type = mavutil.mavlink.FOCUS_TYPE_CONTINUOUS
+                self.set_parameter("CAM1_FOCUS_SPEED", speed)
+
+            # start at the far end of the travel so the measurement cannot be
+            # spoiled by the output hitting a limit
+            self.run_cmd_int(cmd, p1=pct_type, p2=start_pct)
+            self.run_cmd_int(cmd, p1=rate_type, p2=direction)
+            (zoom_rate, focus_rate) = self.measure_camera_zoom_focus_rates()
+            self.run_cmd_int(cmd, p1=rate_type, p2=0)
+
+            if axis == "zoom":
+                (moved, unmoved) = (zoom_rate, focus_rate)
+            else:
+                (moved, unmoved) = (focus_rate, zoom_rate)
+            want = speed * direction
+            self.progress("%s rate want=%f%%/s got=%f%%/s" % (axis, want, moved))
+            if abs(moved - want) > 1.5:
+                raise NotAchievedException(
+                    "%s rate want=%f%%/s got=%f%%/s" % (axis, want, moved))
+            if abs(unmoved) > 0.01:
+                raise NotAchievedException(
+                    "%s command moved the other output at %f%%/s" % (axis, unmoved))
+
+            # the zero rate sent above must stop the movement
+            (zoom_rate, focus_rate) = self.measure_camera_zoom_focus_rates()
+            if abs(zoom_rate) > 0.01 or abs(focus_rate) > 0.01:
+                raise NotAchievedException(
+                    "movement did not stop; zoom=%f%%/s focus=%f%%/s" %
+                    (zoom_rate, focus_rate))
+
     def assert_mount_rpy(self, r, p, y, tolerance=1):
         '''assert mount atttiude in degrees'''
         got_r, got_p, got_y, yaw_is_absolute = self.get_mount_roll_pitch_yaw_deg()
@@ -20630,6 +20701,7 @@ return update, 1000
             self.MountAVTCM62,
             self.MountAVTCM62Dual,
             self.MountAVTCM62DualMission,
+            self.CameraServoZoomFocusSpeed,
             self.MountRCFailAngle,
             self.MountRCFailRate,
             self.FlyMissionTwice,
