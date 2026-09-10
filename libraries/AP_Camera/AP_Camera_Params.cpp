@@ -105,6 +105,22 @@ const AP_Param::GroupInfo AP_Camera_Params::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("_VFOV", 13, AP_Camera_Params, vfov, 0),
 
+    // @Param: _ZOOM_SPEED
+    // @DisplayName: Camera zoom speed
+    // @Description: Speed at which the zoom output moves for continuous (rate) zoom commands. Only used by the Servo camera type
+    // @Units: %/s
+    // @Range: 0 100
+    // @User: Standard
+    AP_GROUPINFO("_ZOOM_SPEED", 14, AP_Camera_Params, zoom_speed, 5),
+
+    // @Param: _FOCUS_SPEED
+    // @DisplayName: Camera focus speed
+    // @Description: Speed at which the focus output moves for continuous (rate) focus commands. Only used by the Servo camera type
+    // @Units: %/s
+    // @Range: 0 100
+    // @User: Standard
+    AP_GROUPINFO("_FOCUS_SPEED", 15, AP_Camera_Params, focus_speed, 5),
+
     AP_GROUPEND
 
 };
