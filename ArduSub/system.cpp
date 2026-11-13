@@ -161,6 +161,20 @@ void Sub::init_ardupilot()
         g2.param_conversion_increment.set_and_save(1);
     }
 
+    // PARAMETER_CONVERSION - Added: Nov-2026
+    // 4.7 changed the throttle trim default from 1100 to 1500 and manual throttle now
+    // uses the trim as neutral, so a saved 1100 makes the vehicle climb at stick centre
+    if (g2.param_conversion_increment < 2) {
+        char param_name[20];
+        snprintf(param_name, sizeof(param_name), "RC%u_TRIM", channel_throttle->ch());
+        enum ap_var_type ptype;
+        const AP_Param *trim = AP_Param::find(param_name, &ptype);
+        if (trim != nullptr && trim->configured() && channel_throttle->get_radio_trim() == 1100) {
+            channel_throttle->set_and_save_radio_trim(1500);
+        }
+        g2.param_conversion_increment.set_and_save(2);
+    }
+
     g2.actuators.initialize_actuators();
 
 #if LEAKDETECTOR_MAX_INSTANCES > 0
