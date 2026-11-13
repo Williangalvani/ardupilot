@@ -617,6 +617,27 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
             self.set_parameter("MOT_THST_HOVER", value)
             self.AltitudeHold()
 
+    def set_param_conversion_increment(self, value):
+        # PARM_FMT_VER is hidden, so saving it sends no PARAM_VALUE for set_parameters to see
+        self.send_set_parameter_direct("PARM_FMT_VER", value)
+        self.wait_parameter_value("PARM_FMT_VER", value)
+
+    def RC3TrimConversion(self):
+        '''test conversion of the pre-4.7 RC3_TRIM default'''
+        self.assert_parameter_value("PARM_FMT_VER", 2)
+
+        self.set_parameter("RC3_TRIM", 1100)
+        self.set_param_conversion_increment(1)
+        self.reboot_sitl()
+        self.assert_parameter_value("RC3_TRIM", 1500)
+        self.assert_parameter_value("PARM_FMT_VER", 2)
+
+        self.set_parameter("RC3_TRIM", 1450)
+        self.set_param_conversion_increment(1)
+        self.reboot_sitl()
+        self.assert_parameter_value("RC3_TRIM", 1450)
+        self.assert_parameter_value("PARM_FMT_VER", 2)
+
     def SIMCompare(self):
         '''compare logged EKF2 and EKF3 estimates against simulator truth'''
         self.set_parameters({
@@ -1895,6 +1916,7 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
             self.mission_NAV_LOITER_TURNS,
             self.mission_NAV_LOITER_TURNS_ccw,
             self.MotorThrustHoverParameterIgnore,
+            self.RC3TrimConversion,
             self.SET_POSITION_TARGET_GLOBAL_INT,
             self.TestLogDownloadMAVProxy,
             self.TestLogDownloadMAVProxyNetwork,
