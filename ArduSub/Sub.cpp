@@ -577,6 +577,76 @@ bool Sub::set_target_velaccel_NED(const Vector3f& target_vel_ned_ms, const Vecto
     return true;
 }
 
+// set target roll pitch and yaw angles with climb rate (for use by scripting)
+bool Sub::set_target_angle_and_climbrate(float roll_deg, float pitch_deg, float yaw_deg, float climb_rate_ms, bool use_yaw_rate, float yaw_rate_degs)
+{
+    // exit if vehicle is not in a mode that accepts guided targets
+    if (!flightmode->in_guided_mode()) {
+        return false;
+    }
+
+    Quaternion q;
+    q.from_euler(radians(roll_deg),radians(pitch_deg),radians(yaw_deg));
+
+    // optional yaw rate, in rad/s
+    const Vector3f ang_vel_body { 0.0f, 0.0f, use_yaw_rate ? radians(yaw_rate_degs) : 0.0f };
+
+    mode_guided.guided_set_angle(q, ang_vel_body, climb_rate_ms * 100.0f, false);
+    return true;
+}
+
+// set target roll pitch and yaw rates with throttle (for use by scripting)
+bool Sub::set_target_rate_and_throttle(float roll_rate_dps, float pitch_rate_dps, float yaw_rate_dps, float throttle)
+{
+    // exit if vehicle is not in a mode that accepts guided targets
+    if (!flightmode->in_guided_mode()) {
+        return false;
+    }
+
+    // Zero quaternion indicates rate control
+    Quaternion q;
+    q.zero();
+
+    // Convert from degrees per second to radians per second
+    Vector3f ang_vel_body { roll_rate_dps, pitch_rate_dps, yaw_rate_dps };
+    ang_vel_body *= DEG_TO_RAD;
+
+    // Pass to guided mode, throttle is 0 to 1 with 0.5 neutral
+    mode_guided.guided_set_angle(q, ang_vel_body, throttle, true);
+    return true;
+}
+
+// set target roll pitch and yaw angles and roll pitch and yaw rates with throttle (for use by scripting)
+bool Sub::set_target_angle_and_rate_and_throttle(float roll_deg, float pitch_deg, float yaw_deg, float roll_rate_degs, float pitch_rate_degs, float yaw_rate_degs, float throttle)
+{
+    // exit if vehicle is not in a mode that accepts guided targets
+    if (!flightmode->in_guided_mode()) {
+        return false;
+    }
+
+    Quaternion q;
+    q.from_euler(radians(roll_deg),radians(pitch_deg),radians(yaw_deg));
+
+    // Convert from degrees per second to radians per second
+    Vector3f ang_vel_body { roll_rate_degs, pitch_rate_degs, yaw_rate_degs };
+    ang_vel_body *= DEG_TO_RAD;
+
+    // throttle is 0 to 1 with 0.5 neutral
+    mode_guided.guided_set_angle(q, ang_vel_body, throttle, true);
+    return true;
+}
+
+// set forward and lateral thrust from -1 to 1 (for use by scripting)
+bool Sub::set_target_forward_lateral(float forward, float lateral)
+{
+    // exit if vehicle is not in a mode that accepts guided targets
+    if (!flightmode->in_guided_mode()) {
+        return false;
+    }
+
+    return mode_guided.guided_set_forward_lateral(forward, lateral);
+}
+
 // Register a custom mode with given number and names
 AP_Vehicle::custom_mode_state* Sub::register_custom_mode(const uint8_t num, const char* full_name, const char* short_name)
 {

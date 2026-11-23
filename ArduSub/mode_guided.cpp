@@ -24,6 +24,14 @@ struct {
     float pitch_cd;
     float yaw_cd;
     float climb_rate_cms;
+#if AP_EXTERNAL_BINDING_ENABLED
+    Quaternion attitude_quat;   // zero for body rate only control
+    Vector3f ang_vel_body_rads;
+    bool use_thrust;
+    float thrust;               // vertical thrust from 0 to 1, 0.5 is neutral. used if use_thrust is true
+    float forward;
+    float lateral;
+#endif
 } static guided_angle_state = {0,0.0f, 0.0f, 0.0f, 0.0f};
 
 struct Guided_Limit {
@@ -194,6 +202,14 @@ void ModeGuided::guided_angle_control_start()
     guided_angle_state.pitch_cd = ahrs.pitch_sensor;
     guided_angle_state.yaw_cd = ahrs.yaw_sensor;
     guided_angle_state.climb_rate_cms = 0.0f;
+#if AP_EXTERNAL_BINDING_ENABLED
+    guided_angle_state.attitude_quat.from_euler(ahrs.get_roll_rad(), ahrs.get_pitch_rad(), ahrs.get_yaw_rad());
+    guided_angle_state.ang_vel_body_rads.zero();
+    guided_angle_state.use_thrust = false;
+    guided_angle_state.thrust = NEUTRAL_THROTTLE;
+    guided_angle_state.forward = 0.0f;
+    guided_angle_state.lateral = 0.0f;
+#endif
 
     // pilot always controls yaw
     sub.yaw_rate_only = false;
@@ -419,10 +435,38 @@ bool ModeGuided::guided_set_posvelaccel(const Vector3f& destination_neu_cm, cons
 // set guided mode angle target
 void ModeGuided::guided_set_angle(const Quaternion &q, float climb_rate_cms)
 {
+    // this target has no body rates, so do not let a zero quaternion select body rate only control;
+    // the default quaternion converts to the same level, north facing euler target
+    guided_set_angle(q.is_zero() ? Quaternion() : q, Vector3f(), climb_rate_cms, false);
+#if AP_EXTERNAL_BINDING_ENABLED
+    // this target has no horizontal thrust
+    guided_angle_state.forward = 0.0f;
+    guided_angle_state.lateral = 0.0f;
+#endif
+}
+
+// set guided mode angle and body rate targets
+// q: desired attitude, zero for body rate only control
+// ang_vel_body_rads: body frame angular velocity (rad/s)
+// climb_rate_cms_or_thrust: climb rate (cm/s) or, if use_thrust is true, vertical thrust from 0 to 1 with 0.5 neutral
+void ModeGuided::guided_set_angle(const Quaternion &q, const Vector3f &ang_vel_body_rads, float climb_rate_cms_or_thrust, bool use_thrust)
+{
     // check we are in angle control mode
     if (sub.guided_mode != Guided_Angle) {
         guided_angle_control_start();
+#if AP_EXTERNAL_BINDING_ENABLED
+    } else if (!use_thrust && guided_angle_state.use_thrust) {
+        // already in angle control but changing from thrust to climb rate
+        position_control->D_init_controller();
+#endif
     }
+
+#if AP_EXTERNAL_BINDING_ENABLED
+    guided_angle_state.attitude_quat = q;
+    guided_angle_state.ang_vel_body_rads = ang_vel_body_rads;
+    guided_angle_state.use_thrust = use_thrust;
+    guided_angle_state.thrust = use_thrust ? constrain_float(climb_rate_cms_or_thrust, 0.0f, 1.0f) : NEUTRAL_THROTTLE;
+#endif
 
     // convert quaternion to euler angles
     q.to_euler(guided_angle_state.roll_cd, guided_angle_state.pitch_cd, guided_angle_state.yaw_cd);
@@ -430,9 +474,24 @@ void ModeGuided::guided_set_angle(const Quaternion &q, float climb_rate_cms)
     guided_angle_state.pitch_cd = degrees(guided_angle_state.pitch_cd) * 100.0f;
     guided_angle_state.yaw_cd = wrap_180_cd(degrees(guided_angle_state.yaw_cd) * 100.0f);
 
-    guided_angle_state.climb_rate_cms = climb_rate_cms;
+    guided_angle_state.climb_rate_cms = use_thrust ? 0.0f : climb_rate_cms_or_thrust;
     guided_angle_state.update_time_ms = AP_HAL::millis();
 }
+
+#if AP_EXTERNAL_BINDING_ENABLED
+// set guided mode forward and lateral thrust, from -1 to 1, used with the angle target
+bool ModeGuided::guided_set_forward_lateral(float forward, float lateral)
+{
+    if (sub.guided_mode != Guided_Angle) {
+        return false;
+    }
+
+    guided_angle_state.forward = constrain_float(forward, -1.0f, 1.0f);
+    guided_angle_state.lateral = constrain_float(lateral, -1.0f, 1.0f);
+    guided_angle_state.update_time_ms = AP_HAL::millis();
+    return true;
+}
+#endif
 
 // helper function to set yaw state and targets
 void ModeGuided::guided_set_yaw_state(bool use_yaw, float yaw_cd, bool use_yaw_rate, float yaw_rate_cds, bool relative_angle)
@@ -846,21 +905,71 @@ void ModeGuided::guided_angle_control_run()
         roll_in = 0.0f;
         pitch_in = 0.0f;
         climb_rate_cms = 0.0f;
+#if AP_EXTERNAL_BINDING_ENABLED
+        guided_angle_state.roll_cd = 0.0f;
+        guided_angle_state.pitch_cd = 0.0f;
+        guided_angle_state.climb_rate_cms = 0.0f;
+        if (guided_angle_state.attitude_quat.is_zero() || !guided_angle_state.ang_vel_body_rads.is_zero()) {
+            // the target was rotating, so level off at the current target heading
+            guided_angle_state.yaw_cd = wrap_180_cd(attitude_control->get_att_target_euler_cd().z);
+            yaw_in = guided_angle_state.yaw_cd;
+            guided_angle_state.attitude_quat.from_euler(0.0f, 0.0f, cd_to_rad(yaw_in));
+            guided_angle_state.ang_vel_body_rads.zero();
+        }
+        if (guided_angle_state.use_thrust) {
+            // changing from thrust to climb rate
+            position_control->D_init_controller();
+            guided_angle_state.use_thrust = false;
+        }
+        guided_angle_state.forward = 0.0f;
+        guided_angle_state.lateral = 0.0f;
+#endif
     }
 
     // set motors to full range
     motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
     // call attitude controller
+#if AP_EXTERNAL_BINDING_ENABLED
+    if (guided_angle_state.attitude_quat.is_zero()) {
+        attitude_control->input_rate_bf_roll_pitch_yaw_rads(guided_angle_state.ang_vel_body_rads.x, guided_angle_state.ang_vel_body_rads.y, guided_angle_state.ang_vel_body_rads.z);
+    } else if (!guided_angle_state.ang_vel_body_rads.is_zero()) {
+        // constrain desired lean angles, keeping the heading
+        float q_roll, q_pitch, q_yaw;
+        guided_angle_state.attitude_quat.to_euler(q_roll, q_pitch, q_yaw);
+        const float q_total = norm(q_roll, q_pitch);
+        const float angle_max_rad = cd_to_rad(angle_max);
+        if (q_total > angle_max_rad) {
+            const float ratio = angle_max_rad / q_total;
+            guided_angle_state.attitude_quat.from_euler(q_roll * ratio, q_pitch * ratio, q_yaw);
+        }
+        attitude_control->input_quaternion(guided_angle_state.attitude_quat, guided_angle_state.ang_vel_body_rads);
+    } else {
+        attitude_control->input_euler_angle_roll_pitch_yaw_cd(roll_in, pitch_in, yaw_in, true);
+    }
+#else
     attitude_control->input_euler_angle_roll_pitch_yaw_cd(roll_in, pitch_in, yaw_in, true);
+#endif
 
     // call position controller
+#if AP_EXTERNAL_BINDING_ENABLED
+    if (guided_angle_state.use_thrust) {
+        attitude_control->set_throttle_out(guided_angle_state.thrust, true, g.throttle_filt);
+    } else {
+        position_control->D_set_pos_target_from_climb_rate_cms(climb_rate_cms);
+        position_control->D_update_controller();
+    }
+
+    motors.set_lateral(guided_angle_state.lateral);
+    motors.set_forward(guided_angle_state.forward);
+#else
     position_control->D_set_pos_target_from_climb_rate_cms(climb_rate_cms);
     position_control->D_update_controller();
 
     // do not carry horizontal thrust over from the previous mode
     motors.set_lateral(0.0f);
     motors.set_forward(0.0f);
+#endif
 }
 
 // Guided Limit code

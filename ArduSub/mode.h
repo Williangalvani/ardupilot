@@ -247,8 +247,11 @@ public:
     bool in_guided_mode() const override { return true; }
     bool guided_limit_check();
     void guided_limit_init_time_and_pos();
-    void guided_set_angle(const Quaternion &q, float climb_rate_cms, bool use_yaw_rate, float yaw_rate_rads);
     void guided_set_angle(const Quaternion&, float);
+    void guided_set_angle(const Quaternion &q, const Vector3f &ang_vel_body_rads, float climb_rate_cms_or_thrust, bool use_thrust);
+#if AP_EXTERNAL_BINDING_ENABLED
+    bool guided_set_forward_lateral(float forward, float lateral);
+#endif
     void guided_limit_set(uint32_t timeout_ms, float alt_min_cm, float alt_max_cm, float horiz_max_cm);
     bool guided_set_posvelaccel(const Vector3f& destination_neu_cm, const Vector3f& velocity_neu_cms, const Vector3f& accel_neu_cmss);
     bool guided_set_posvelaccel(const Vector3f& destination_neu_cm, const Vector3f& velocity_neu_cms, const Vector3f& accel_neu_cmss, bool use_yaw, float yaw_cd, bool use_yaw_rate, float yaw_rate_cds, bool relative_yaw);
