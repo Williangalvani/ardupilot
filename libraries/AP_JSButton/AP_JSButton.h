@@ -23,8 +23,13 @@ public:
         k_mode_guided           = 11,           ///< enter guided mode
         k_mode_acro             = 12,           ///< enter acro mode
         k_mode_surftrak         = 13,           ///< enter surftrak mode
+        k_mode_custom_1         = 14,           ///< enter 1st custom mode registered by scripting
+        k_mode_custom_2         = 15,           ///< enter 2nd custom mode registered by scripting
+        k_mode_custom_3         = 16,           ///< enter 3rd custom mode registered by scripting
+        k_mode_custom_4         = 17,           ///< enter 4th custom mode registered by scripting
+        k_mode_custom_5         = 18,           ///< enter 5th custom mode registered by scripting
 
-        // 14-20 reserved for future mode functions
+        // 19-20 reserved for future mode functions
         k_mount_center          = 21,           ///< move mount to center
         k_mount_tilt_up         = 22,           ///< tilt mount up
         k_mount_tilt_down       = 23,           ///< tilt mount down
