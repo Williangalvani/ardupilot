@@ -962,7 +962,16 @@ uint8_t GCS_MAVLINK_Sub::send_available_mode(uint8_t index) const
         &sub.mode_motordetect,
     };
 
-    const uint8_t mode_count = ARRAY_SIZE(modes);
+    const uint8_t base_mode_count = ARRAY_SIZE(modes);
+    uint8_t mode_count = base_mode_count;
+
+#if AP_EXTERNAL_BINDING_ENABLED
+    for (uint8_t i = 0; i < ARRAY_SIZE(sub.mode_guided_custom); i++) {
+        if (sub.mode_guided_custom[i] != nullptr) {
+            mode_count += 1;
+        }
+    }
+#endif
 
     // Convert to zero indexed
     const uint8_t index_zero = index - 1;
@@ -972,8 +981,27 @@ uint8_t GCS_MAVLINK_Sub::send_available_mode(uint8_t index) const
     }
 
     // Ask the mode for its name and number
-    const char* name = modes[index_zero]->name();
-    const uint8_t mode_number = (uint8_t)modes[index_zero]->number();
+    const char* name;
+    uint8_t mode_number;
+
+    if (index_zero < base_mode_count) {
+        name = modes[index_zero]->name();
+        mode_number = (uint8_t)modes[index_zero]->number();
+
+    } else {
+#if AP_EXTERNAL_BINDING_ENABLED
+        const uint8_t custom_index = index_zero - base_mode_count;
+        if (sub.mode_guided_custom[custom_index] == nullptr) {
+            // Invalid index, should not happen
+            return mode_count;
+        }
+        name = sub.mode_guided_custom[custom_index]->name();
+        mode_number = (uint8_t)sub.mode_guided_custom[custom_index]->number();
+#else
+        // Should not endup here
+        return mode_count;
+#endif
+    }
 
     mavlink_msg_available_modes_send(
         chan,

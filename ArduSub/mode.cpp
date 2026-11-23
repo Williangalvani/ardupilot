@@ -59,6 +59,15 @@ Mode *Sub::mode_from_mode_num(const Mode::Number mode)
         ret = &mode_motordetect;
         break;
     default:
+#if AP_EXTERNAL_BINDING_ENABLED
+        // Check registered custom modes
+        for (uint8_t i = 0; i < ARRAY_SIZE(mode_guided_custom); i++) {
+            if ((mode_guided_custom[i] != nullptr) && (mode_guided_custom[i]->number() == mode)) {
+                ret = mode_guided_custom[i];
+                break;
+            }
+        }
+#endif
         break;
     }
 

@@ -610,6 +610,10 @@ private:
     ModeSurface mode_surface;
     ModeMotordetect mode_motordetect;
     ModeSurftrak mode_surftrak;
+#if AP_EXTERNAL_BINDING_ENABLED
+    // Custom modes registered at runtime
+    ModeGuidedCustom *mode_guided_custom[5];
+#endif
 
     // Auto
     AutoSubMode auto_mode;   // controls which auto controller is run
@@ -638,6 +642,9 @@ public:
 
     // Set targets in GUIDED mode
     bool set_target_posvelaccel_NED(const Vector3f& target_pos_ned_m, const Vector3f& target_vel_ned_ms, const Vector3f& target_accel_ned_mss, bool use_yaw, float yaw_deg, bool use_yaw_rate, float yaw_rate_degs, bool yaw_relative) override;
+
+    // Register a custom mode with given number and names
+    AP_Vehicle::custom_mode_state* register_custom_mode(const uint8_t number, const char* full_name, const char* short_name) override;
 
 #if AP_RANGEFINDER_ENABLED
     float get_rangefinder_target_cm() const WARN_IF_UNUSED { return mode_surftrak.get_rangefinder_target_cm(); }

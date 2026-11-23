@@ -480,6 +480,56 @@ bool Sub::set_target_posvelaccel_NED(const Vector3f& target_pos_ned_m, const Vec
 
     return mode_guided.guided_set_posvelaccel(pos_neu_cm, vel_neu_cms, accel_neu_cmss, use_yaw, yaw_deg * 100.0f, use_yaw_rate, yaw_rate_degs * 100.0f, yaw_relative);
 }
+
+// Register a custom mode with given number and names
+AP_Vehicle::custom_mode_state* Sub::register_custom_mode(const uint8_t num, const char* full_name, const char* short_name)
+{
+    const Mode::Number number = (Mode::Number)num;
+
+    // See if this mode has been registered already, if it has return the state for it
+    // This allows scripting restarts
+    for (uint8_t i = 0; i < ARRAY_SIZE(mode_guided_custom); i++) {
+        if (mode_guided_custom[i] == nullptr) {
+            break;
+        }
+        if ((mode_guided_custom[i]->number() == number) &&
+            (strcmp(mode_guided_custom[i]->name(), full_name) == 0) &&
+            (strncmp(mode_guided_custom[i]->name4(), short_name, 4) == 0)) {
+            return &mode_guided_custom[i]->state;
+        }
+    }
+
+    // Number already registered to existing mode
+    if (mode_from_mode_num(number) != nullptr) {
+        return nullptr;
+    }
+
+    // Find free slot
+    for (uint8_t i = 0; i < ARRAY_SIZE(mode_guided_custom); i++) {
+        if (mode_guided_custom[i] == nullptr) {
+            // Duplicate strings so were not pointing to unknown memory
+            const char* full_name_copy = strdup(full_name);
+            const char* short_name_copy = strndup(short_name, 4);
+            if ((full_name_copy != nullptr) && (short_name_copy != nullptr)) {
+                mode_guided_custom[i] = NEW_NOTHROW ModeGuidedCustom(number, full_name_copy, short_name_copy);
+            }
+            if (mode_guided_custom[i] == nullptr) {
+                // Allocation failure
+                free((void*)full_name_copy);
+                free((void*)short_name_copy);
+                return nullptr;
+            }
+
+            // Registration successful, notify the GCS that it should re-request the available modes
+            gcs().available_modes_changed();
+
+            return &mode_guided_custom[i]->state;
+        }
+    }
+
+    // No free slots
+    return nullptr;
+}
 #endif
 
 Sub *Sub::_singleton = nullptr;

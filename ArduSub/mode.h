@@ -283,6 +283,31 @@ private:
     void guided_angle_control_start();
 };
 
+#if AP_EXTERNAL_BINDING_ENABLED
+// Mode which behaves as guided with custom mode number and name
+class ModeGuidedCustom : public ModeGuided
+{
+
+public:
+    // constructor registers custom number and names
+    ModeGuidedCustom(const Number _number, const char* _full_name, const char* _short_name);
+
+    bool init(bool ignore_checks) override;
+
+    Mode::Number number() const override { return mode_number; }
+
+    const char *name() const override { return full_name; }
+    const char *name4() const override { return short_name; }
+
+    // State object which can be edited by scripting
+    AP_Vehicle::custom_mode_state state;
+
+private:
+    const Mode::Number mode_number;
+    const char* full_name;
+    const char* short_name;
+};
+#endif
 
 
 class ModeAuto : public ModeGuided
