@@ -197,6 +197,24 @@ void Sub::handle_jsbutton_press(uint8_t _button, bool shift, bool held)
         set_mode(Mode::Number::SURFTRAK, ModeReason::RC_COMMAND);
         break;
 #endif
+#if AP_EXTERNAL_BINDING_ENABLED
+    case JSButton::button_function_t::k_mode_custom_1:
+    case JSButton::button_function_t::k_mode_custom_2:
+    case JSButton::button_function_t::k_mode_custom_3:
+    case JSButton::button_function_t::k_mode_custom_4:
+    case JSButton::button_function_t::k_mode_custom_5:
+        // custom modes are selected in registration order, the order AVAILABLE_MODES reports them in.
+        // only act on the first press so a held button does not repeat warnings
+        if (!held) {
+            const uint8_t index = get_button(_button)->function(shift) - JSButton::button_function_t::k_mode_custom_1;
+            if (mode_guided_custom[index] == nullptr) {
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "Custom mode %u not registered", unsigned(index + 1));
+            } else {
+                set_mode(mode_guided_custom[index]->number(), ModeReason::RC_COMMAND);
+            }
+        }
+        break;
+#endif
 #if HAL_MOUNT_ENABLED
     case JSButton::button_function_t::k_mount_center:
         camera_mount.set_angle_target(0, 0, 0, false);
