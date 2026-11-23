@@ -260,6 +260,7 @@ public:
         MainSail = 6,
         WingSail = 7,
         Walking_Height = 8,
+        Forward = 9,
         Last_ControlOutput  // place new values before this
     };
 
