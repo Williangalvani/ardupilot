@@ -2214,6 +2214,12 @@ function sub:get_rangefinder_target_cm() end
 ---@return boolean
 function sub:set_rangefinder_target_cm(new_target_cm) end
 
+-- Set forward and lateral thrust in guided mode, used with the angle and rate targets set by vehicle:set_target_rate_and_throttle, vehicle:set_target_angle_and_rate_and_throttle or vehicle:set_target_angle_and_climbrate, which must be set first
+---@param forward number -- forward thrust from -1 to 1
+---@param lateral number -- lateral thrust from -1 to 1, positive to the right
+---@return boolean -- true if successful
+function sub:set_target_forward_lateral(forward, lateral) end
+
 
 -- desc
 quadplane = {}
@@ -2764,7 +2770,7 @@ function vehicle:set_target_angle_and_climbrate(roll_deg, pitch_deg, yaw_deg, cl
 ---@param roll_rate_dps number -- roll rate in degrees per second
 ---@param pitch_rate_dps number -- pitch rate in degrees per second
 ---@param yaw_rate_dps number -- yaw rate in degrees per second
----@param throttle number -- throttle demand 0.0 to 1.0
+---@param throttle number -- throttle demand 0.0 to 1.0, on Sub 0.5 is no vertical thrust
 ---@return boolean -- true if successful
 function vehicle:set_target_rate_and_throttle(roll_rate_dps, pitch_rate_dps, yaw_rate_dps, throttle) end
 
@@ -2775,7 +2781,7 @@ function vehicle:set_target_rate_and_throttle(roll_rate_dps, pitch_rate_dps, yaw
 ---@param roll_rate_dps number -- roll rate in degrees per second
 ---@param pitch_rate_dps number -- pitch rate in degrees per second
 ---@param yaw_rate_dps number -- yaw rate in degrees per second
----@param throttle number -- throttle demand 0.0 to 1.0
+---@param throttle number -- throttle demand 0.0 to 1.0, on Sub 0.5 is no vertical thrust
 ---@return boolean -- true on success
 function vehicle:set_target_angle_and_rate_and_throttle(roll_deg, pitch_deg, yaw_deg, roll_rate_dps, pitch_rate_dps, yaw_rate_dps, throttle) end
 
@@ -2855,6 +2861,7 @@ function vehicle:start_takeoff(alt) end
 ---| '6' # MainSail
 ---| '7' # WingSail
 ---| '8' # Walking_Height
+---| '9' # Forward
 ---@return number|nil
 function vehicle:get_control_output(control_output) end
 
@@ -2955,7 +2962,7 @@ function vehicle:set_crosstrack_enabled(enabled) end
 ---@return boolean|nil
 function vehicle:get_crosstrack_enabled() end
 
--- Register a custom mode. This behaves like guided mode but will report with a custom number and name
+-- Register a custom mode. This behaves like guided mode but will report with a custom number and name. Supported on Copter and Sub
 ---@param number integer -- mode number to use, should be over 100
 ---@param full_name string -- Full mode name
 ---@param short_name string -- Short mode name upto 4 characters
