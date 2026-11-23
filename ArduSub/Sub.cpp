@@ -406,6 +406,36 @@ bool Sub::get_wp_crosstrack_error_m(float &xtrack_error) const
     return true;
 }
 
+// returns a Location to which the vehicle is currently heading, or
+// would head in an autonomous mode
+bool Sub::get_wp(Location &loc) const
+{
+    // in Guided mode, only Guided_WP uses wp_nav; the other submodes keep
+    // their own targets. Guided_WP breaks out to the wp_nav return below.
+    if (flightmode->in_guided_mode()) {
+        switch (guided_mode) {
+        case Guided_WP:
+            break;
+        case Guided_PosVelAccel: {
+            Vector3f pos_neu_cm;
+            if (!mode_guided.get_posvelaccel_target_NEU_cm(pos_neu_cm)) {
+                return false;
+            }
+            loc = Location(pos_neu_cm, Location::AltFrame::ABOVE_ORIGIN);
+            return true;
+        }
+        case Guided_Velocity:
+        case Guided_VelAccel:
+        case Guided_Angle:
+            // no fixed position target to report
+            return false;
+        }
+    }
+
+    // for non-guided modes (Auto, etc.) fall back to wp_nav as before
+    return wp_nav.is_active() && wp_nav.get_wp_destination_loc(loc);
+}
+
 #if AP_STATS_ENABLED
 /*
   update AP_Stats
@@ -671,6 +701,89 @@ void Sub::nav_script_time_done(uint16_t id)
     }
 
     return mode_auto.nav_script_time_done(id);
+}
+
+// get target location (for use by scripting)
+bool Sub::get_target_location(Location& target_loc)
+{
+    return get_wp(target_loc);
+}
+
+/*
+  update_target_location() acts as a wrapper for set_target_location
+ */
+bool Sub::update_target_location(const Location &old_loc, const Location &new_loc)
+{
+    /*
+      by checking the caller has provided the correct old target
+      location we prevent a race condition where the user changes mode
+      or commands a different target in the controlling lua script
+    */
+    Location next_WP_loc;
+    get_wp(next_WP_loc);
+    if (!old_loc.same_loc_as(next_WP_loc) ||
+         old_loc.get_alt_frame() != new_loc.get_alt_frame()) {
+        return false;
+    }
+
+    return set_target_location(new_loc);
+}
+
+bool Sub::get_circle_radius(float &radius_m)
+{
+    radius_m = circle_nav.get_radius_m();
+    return true;
+}
+
+bool Sub::set_circle_rate(float rate_dps)
+{
+    circle_nav.set_rate_degs(rate_dps);
+    return true;
+}
+
+// set desired speed (m/s), as MAV_CMD_DO_CHANGE_SPEED does. Used for scripting.
+bool Sub::set_desired_speed(float speed_ms)
+{
+    if (!is_positive(speed_ms)) {
+        return false;
+    }
+    wp_nav.set_speed_NE_cms(speed_ms * 100.0f);
+    return true;
+}
+
+// returns true if the EKF failsafe has triggered.  Only used by Lua scripts
+bool Sub::has_ekf_failsafed() const
+{
+    return failsafe.ekf;
+}
+
+// get control output (for use in scripting)
+// returns true on success and control_value is set to a value in the range -1 to +1,
+// except throttle which is 0 to 1 with 0.5 as no vertical thrust
+bool Sub::get_control_output(AP_Vehicle::ControlOutput control_output, float &control_value)
+{
+    switch (control_output) {
+    case AP_Vehicle::ControlOutput::Roll:
+        control_value = constrain_float(motors.get_roll(), -1.0f, 1.0f);
+        return true;
+    case AP_Vehicle::ControlOutput::Pitch:
+        control_value = constrain_float(motors.get_pitch(), -1.0f, 1.0f);
+        return true;
+    case AP_Vehicle::ControlOutput::Throttle:
+        control_value = motors.get_throttle();
+        return true;
+    case AP_Vehicle::ControlOutput::Yaw:
+        control_value = constrain_float(motors.get_yaw(), -1.0f, 1.0f);
+        return true;
+    case AP_Vehicle::ControlOutput::Lateral:
+        control_value = constrain_float(motors.get_lateral(), -1.0f, 1.0f);
+        return true;
+    case AP_Vehicle::ControlOutput::Forward:
+        control_value = constrain_float(motors.get_forward(), -1.0f, 1.0f);
+        return true;
+    default:
+        return false;
+    }
 }
 
 // Register a custom mode with given number and names
