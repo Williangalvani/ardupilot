@@ -31,6 +31,12 @@ bool ModeAuto::init(bool ignore_checks) {
     return true;
 }
 
+// only accept external targets while running a NAV_GUIDED_ENABLE command
+bool ModeAuto::in_guided_mode() const
+{
+    return sub.auto_mode == Auto_NavGuided;
+}
+
 // auto_run - runs the appropriate auto controller
 // according to the current auto_mode
 void ModeAuto::run()

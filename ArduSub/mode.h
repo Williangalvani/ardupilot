@@ -299,6 +299,7 @@ public:
     bool requires_altitude() const override { return true; }
     bool allows_arming(bool from_gcs) const override { return true; }
     bool is_autopilot() const override { return true; }
+    bool in_guided_mode() const override;
     bool auto_loiter_start();
     void auto_wp_start(const Vector3f& destination_neu_cm);
     void auto_wp_start(const Location& dest_loc);
