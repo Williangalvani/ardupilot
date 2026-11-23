@@ -647,6 +647,32 @@ bool Sub::set_target_forward_lateral(float forward, float lateral)
     return mode_guided.guided_set_forward_lateral(forward, lateral);
 }
 
+// returns true if mode supports NAV_SCRIPT_TIME mission commands
+bool Sub::nav_scripting_enable(uint8_t mode)
+{
+    return mode == (uint8_t)Mode::Number::AUTO;
+}
+
+// lua scripts use this to retrieve the contents of the active command
+bool Sub::nav_script_time(uint16_t &id, uint8_t &cmd, float &arg1, float &arg2, int16_t &arg3, int16_t &arg4)
+{
+    if (flightmode != &mode_auto) {
+        return false;
+    }
+
+    return mode_auto.nav_script_time(id, cmd, arg1, arg2, arg3, arg4);
+}
+
+// lua scripts use this to indicate when they have complete the command
+void Sub::nav_script_time_done(uint16_t id)
+{
+    if (flightmode != &mode_auto) {
+        return;
+    }
+
+    return mode_auto.nav_script_time_done(id);
+}
+
 // Register a custom mode with given number and names
 AP_Vehicle::custom_mode_state* Sub::register_custom_mode(const uint8_t num, const char* full_name, const char* short_name)
 {

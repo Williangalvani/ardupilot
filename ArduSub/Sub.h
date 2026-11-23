@@ -656,6 +656,11 @@ public:
     // forward and lateral thrust from -1 to 1, used with the angle and rate targets
     bool set_target_forward_lateral(float forward, float lateral);
 
+    // support for NAV_SCRIPT_TIME mission command
+    bool nav_scripting_enable(uint8_t mode) override;
+    bool nav_script_time(uint16_t &id, uint8_t &cmd, float &arg1, float &arg2, int16_t &arg3, int16_t &arg4) override;
+    void nav_script_time_done(uint16_t id) override;
+
     // Register a custom mode with given number and names
     AP_Vehicle::custom_mode_state* register_custom_mode(const uint8_t number, const char* full_name, const char* short_name) override;
 

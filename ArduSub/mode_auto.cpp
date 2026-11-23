@@ -31,10 +31,10 @@ bool ModeAuto::init(bool ignore_checks) {
     return true;
 }
 
-// only accept external targets while running a NAV_GUIDED_ENABLE command
+// only accept external targets while running a NAV_GUIDED_ENABLE or NAV_SCRIPT_TIME command
 bool ModeAuto::in_guided_mode() const
 {
-    return sub.auto_mode == Auto_NavGuided;
+    return sub.auto_mode == Auto_NavGuided || sub.auto_mode == Auto_NavScriptTime;
 }
 
 // auto_run - runs the appropriate auto controller
@@ -56,7 +56,8 @@ void ModeAuto::run()
         break;
 
     case Auto_NavGuided:
-#if NAV_GUIDED
+    case Auto_NavScriptTime:
+#if NAV_GUIDED || AP_EXTERNAL_BINDING_ENABLED
         auto_nav_guided_run();
 #endif
         break;
@@ -269,7 +270,9 @@ void ModeAuto::auto_nav_guided_start()
     // initialise guided start time and position as reference for limit checking
     sub.mode_auto.guided_limit_init_time_and_pos();
 }
+#endif  // NAV_GUIDED
 
+#if NAV_GUIDED || AP_EXTERNAL_BINDING_ENABLED
 // auto_nav_guided_run - allows control by external navigation controller
 //      called by auto_run at 100hz or more
 void ModeAuto::auto_nav_guided_run()
@@ -277,7 +280,65 @@ void ModeAuto::auto_nav_guided_run()
     // call regular guided flight mode run function
     sub.mode_guided.run();
 }
-#endif  // NAV_GUIDED
+#endif  // NAV_GUIDED || AP_EXTERNAL_BINDING_ENABLED
+
+#if AP_EXTERNAL_BINDING_ENABLED
+// start accepting position, velocity, acceleration and attitude targets from lua scripts
+void ModeAuto::do_nav_script_time(const AP_Mission::Mission_Command& cmd)
+{
+    // call regular guided flight mode initialisation
+    if (sub.mode_guided.init(true)) {
+        nav_scripting.done = false;
+        nav_scripting.id++;
+        nav_scripting.start_ms = AP_HAL::millis();
+        nav_scripting.command = cmd.content.nav_script_time.command;
+        nav_scripting.timeout_s = cmd.content.nav_script_time.timeout_s;
+        nav_scripting.arg1 = cmd.content.nav_script_time.arg1.get();
+        nav_scripting.arg2 = cmd.content.nav_script_time.arg2.get();
+        nav_scripting.arg3 = cmd.content.nav_script_time.arg3;
+        nav_scripting.arg4 = cmd.content.nav_script_time.arg4;
+        sub.auto_mode = Auto_NavScriptTime;
+    } else {
+        // for safety we set nav_scripting to done to protect against the mission getting stuck
+        nav_scripting.done = true;
+    }
+}
+
+// check if verify_nav_script_time command has completed
+bool ModeAuto::verify_nav_script_time() const
+{
+    // if done or timeout then return true
+    if (nav_scripting.done ||
+        ((nav_scripting.timeout_s > 0) &&
+         (AP_HAL::millis() - nav_scripting.start_ms) > (nav_scripting.timeout_s * 1000))) {
+        return true;
+    }
+    return false;
+}
+
+// lua scripts use this to retrieve the contents of the active command
+bool ModeAuto::nav_script_time(uint16_t &id, uint8_t &cmd, float &arg1, float &arg2, int16_t &arg3, int16_t &arg4)
+{
+    if (sub.auto_mode == Auto_NavScriptTime) {
+        id = nav_scripting.id;
+        cmd = nav_scripting.command;
+        arg1 = nav_scripting.arg1;
+        arg2 = nav_scripting.arg2;
+        arg3 = nav_scripting.arg3;
+        arg4 = nav_scripting.arg4;
+        return true;
+    }
+    return false;
+}
+
+// lua scripts use this to indicate when they have complete the command
+void ModeAuto::nav_script_time_done(uint16_t id)
+{
+    if ((sub.auto_mode == Auto_NavScriptTime) && (id == nav_scripting.id)) {
+        nav_scripting.done = true;
+    }
+}
+#endif  // AP_EXTERNAL_BINDING_ENABLED
 
 // auto_loiter_start - initialises loitering in auto mode
 //  returns success/failure because this can be called by exit_mission

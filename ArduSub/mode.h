@@ -22,7 +22,8 @@ enum AutoSubMode {
     Auto_Circle,
     Auto_NavGuided,
     Auto_Loiter,
-    Auto_TerrainRecover
+    Auto_TerrainRecover,
+    Auto_NavScriptTime,
 };
 
 class Mode
@@ -346,6 +347,14 @@ public:
     void set_auto_yaw_look_at_heading(float angle_deg, float turn_rate_dps, int8_t direction, uint8_t relative_angle);
     void set_yaw_rate(float turn_rate_dps);
     bool auto_terrain_recover_start();
+#if AP_EXTERNAL_BINDING_ENABLED
+    void do_nav_script_time(const AP_Mission::Mission_Command& cmd);
+    bool verify_nav_script_time() const;
+
+    // lua accessors for nav script time support
+    bool nav_script_time(uint16_t &id, uint8_t &cmd, float &arg1, float &arg2, int16_t &arg3, int16_t &arg4);
+    void nav_script_time_done(uint16_t id);
+#endif
 
 protected:
 
@@ -359,6 +368,21 @@ private:
     void auto_nav_guided_run();
     void auto_loiter_run();
     void auto_terrain_recover_run();
+
+#if AP_EXTERNAL_BINDING_ENABLED
+    // nav_script_time command variables
+    struct {
+        bool done;          // true once lua script indicates it has completed
+        uint16_t id;        // unique id to avoid race conditions between commands and lua scripts
+        uint32_t start_ms;  // system time nav_script_time command was received (used for timeout)
+        uint8_t command;    // command number provided by mission command
+        uint8_t timeout_s;  // timeout (in seconds) provided by mission command
+        float arg1;         // 1st argument provided by mission command
+        float arg2;         // 2nd argument provided by mission command
+        int16_t arg3;       // 3rd argument provided by mission command
+        int16_t arg4;       // 4th argument provided by mission command
+    } nav_scripting;
+#endif
 };
 
 

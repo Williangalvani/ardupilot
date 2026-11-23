@@ -7,6 +7,14 @@ static enum AutoSurfaceState auto_surface_state = AUTO_SURFACE_STATE_GO_TO_LOCAT
 // start_command - this function will be called when the ap_mission lib wishes to start a new command
 bool Sub::start_command(const AP_Mission::Mission_Command& cmd)
 {
+#if AP_EXTERNAL_BINDING_ENABLED
+    // NAV_SCRIPT_TIME content holds script arguments, not a location, so skip the altitude frame checks
+    if (cmd.id == MAV_CMD_NAV_SCRIPT_TIME) {
+        mode_auto.do_nav_script_time(cmd);
+        return true;
+    }
+#endif
+
     const Location &target_loc = cmd.content.location;
     auto alt_frame = target_loc.get_alt_frame();
 
@@ -177,6 +185,11 @@ bool Sub::verify_command(const AP_Mission::Mission_Command& cmd)
 
     case MAV_CMD_NAV_DELAY:
         return verify_nav_delay(cmd);
+
+#if AP_EXTERNAL_BINDING_ENABLED
+    case MAV_CMD_NAV_SCRIPT_TIME:
+        return mode_auto.verify_nav_script_time();
+#endif
 
         ///
         /// conditional commands
