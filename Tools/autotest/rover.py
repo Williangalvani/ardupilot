@@ -5188,6 +5188,125 @@ Brakes have negligible effect (with=%0.2fm without=%0.2fm delta=%0.2fm)
         self.context_pop()
         self.reboot_sitl()
 
+    def RoverMotorDetect(self):
+        '''test rover-motor-detect.lua applet on a skid-steer rover'''
+        self.install_applet_script_context("rover-motor-detect.lua")
+        # install the MAVLink modules shipped in AP_Scripting, as a user would
+        shutil.copytree(
+            os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "MAVLink"),
+            os.path.join("scripts", "modules", "MAVLink"),
+        )
+        self.context_get().installed_modules.append("MAVLink")
+        self.set_parameter("SCR_ENABLE", 1)
+        model = "rover-skid"
+        self.customise_SITL_commandline(
+            [],
+            model=model,
+            defaults_filepath=self.model_defaults_filepath(model),
+        )
+        # SITL rover-skid: SERVO1 drives the left motor, SERVO3 the right motor
+
+        def setup_case(name, servo_params, apply):
+            self.start_subtest(name)
+            self.context_push()
+            self.set_parameters(servo_params)
+            self.set_parameter("MDET_APPLY", apply)
+            self.reboot_sitl()
+            self.context_collect('STATUSTEXT')
+            self.change_mode("MANUAL")
+            self.wait_ready_to_arm()
+            self.arm_vehicle()
+
+        def start_detect(use_command):
+            if use_command:
+                self.run_cmd(31010, p1=1)
+            else:
+                self.set_parameter("MDET_START", 1)
+            self.wait_statustext("MDET: MOTOR_DETECT started", check_context=True)
+
+        def run_case(name, servo_params, apply, use_command, report, outcome, final):
+            setup_case(name, servo_params, apply)
+            start_detect(use_command)
+            self.wait_statustext(report, check_context=True, timeout=120)
+            self.wait_statustext(outcome, check_context=True, timeout=120)
+            self.wait_mode("MANUAL")
+            self.assert_parameter_value("MDET_START", 0)
+            self.assert_parameter_values(final)
+
+        def assert_drives_correctly():
+            '''independent check in MANUAL that forward goes forward and right turns right'''
+            self.set_rc(3, 1800)
+            self.wait_groundspeed(1, 100, timeout=10)
+            att = self.assert_receive_message('ATTITUDE')
+            vel = self.assert_receive_message('LOCAL_POSITION_NED')
+            forward = vel.vx * math.cos(att.yaw) + vel.vy * math.sin(att.yaw)
+            self.set_rc(3, 1500)
+            if forward < 0.5:
+                raise NotAchievedException("forward throttle gave forward speed %.2f" % forward)
+            self.wait_groundspeed(0, 0.1, timeout=10)
+            self.set_rc(1, 1700)
+            self.delay_sim_time(1, "turning right")
+            yawspeed = self.assert_receive_message('ATTITUDE').yawspeed
+            self.set_rc(1, 1500)
+            if yawspeed < math.radians(10):
+                raise NotAchievedException("right steering gave yaw rate %.1f deg/s" % math.degrees(yawspeed))
+
+        correct = {"SERVO1_FUNCTION": 73, "SERVO3_FUNCTION": 74, "SERVO1_REVERSED": 0, "SERVO3_REVERSED": 0}
+
+        self.start_subtest("refuse to start while disarmed")
+        self.wait_ready_to_arm()
+        self.run_cmd(31010, p1=1, want_result=mavutil.mavlink.MAV_RESULT_FAILED)
+
+        run_case("correct wiring",
+                 {}, apply=0, use_command=True,
+                 report="MDET: swap:no SERVO1:ok SERVO3:ok",
+                 outcome="MDET: verified, no change needed",
+                 final=correct)
+        self.disarm_vehicle()
+        self.context_pop()
+
+        swapped = {"SERVO1_FUNCTION": 74, "SERVO3_FUNCTION": 73}
+        run_case("swapped, report only",
+                 swapped, apply=0, use_command=False,
+                 report="MDET: swap:yes SERVO3:ok SERVO1:ok",
+                 outcome="MDET: consistent, set MDET_APPLY=1 to fix",
+                 final=swapped)
+        self.disarm_vehicle()
+        self.context_pop()
+
+        run_case("swapped and SERVO1 reversed, apply",
+                 {"SERVO1_FUNCTION": 74, "SERVO3_FUNCTION": 73, "SERVO1_REVERSED": 1}, apply=1, use_command=True,
+                 report="MDET: swap:yes SERVO3:ok SERVO1:rev",
+                 outcome="MDET: fixed and verified, saved",
+                 final=correct)
+        assert_drives_correctly()
+        self.disarm_vehicle()
+        self.context_pop()
+
+        run_case("both reversed, apply",
+                 {"SERVO1_REVERSED": 1, "SERVO3_REVERSED": 1}, apply=1, use_command=False,
+                 report="MDET: swap:no SERVO1:rev SERVO3:rev",
+                 outcome="MDET: fixed and verified, saved",
+                 final=correct)
+        assert_drives_correctly()
+        self.disarm_vehicle()
+        self.context_pop()
+
+        bad = {"SERVO1_FUNCTION": 74, "SERVO3_FUNCTION": 73, "SERVO3_REVERSED": 1}
+        setup_case("mode change during fix verification reverts", bad, apply=1)
+        start_detect(use_command=True)
+        self.wait_statustext("MDET: swap:yes SERVO3:rev SERVO1:ok", check_context=True, timeout=120)
+        self.wait_statustext("MDET: fixes applied, verifying", check_context=True, timeout=120)
+        self.change_mode("HOLD")
+        self.wait_statustext("MDET: MOTOR_DETECT aborted: mode changed", check_context=True)
+        self.wait_statustext("MDET: parameter changes reverted", check_context=True)
+        self.assert_parameter_value("MDET_START", 0)
+        self.assert_parameter_values(bad)
+        self.disarm_vehicle()
+        self.context_pop()
+
+        self.reboot_sitl()
+
     def test_scripting_auxfunc(self):
         self.start_subtest("Scripting aufunc triggering")
 
@@ -8611,6 +8730,7 @@ return update()
             self.Scripting,
             self.ScriptingMAVLink,
             self.ScriptingSteeringAndThrottle,
+            self.RoverMotorDetect,
             self.MissionFrames,
             self.SetpointGlobalPos,
             self.SetpointGlobalVel,
