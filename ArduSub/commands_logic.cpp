@@ -599,7 +599,7 @@ bool Sub::verify_yaw()
 bool Sub::do_guided(const AP_Mission::Mission_Command& cmd)
 {
     // only process guided waypoint if we are in guided mode
-    if (control_mode != Mode::Number::GUIDED && !(control_mode == Mode::Number::AUTO && auto_mode == Auto_NavGuided)) {
+    if (!flightmode->in_guided_mode()) {
         return false;
     }
 

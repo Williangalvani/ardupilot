@@ -642,8 +642,8 @@ void GCS_MAVLINK_Sub::handle_message_set_position_target_local_ned(const mavlink
         mavlink_set_position_target_local_ned_t packet;
         mavlink_msg_set_position_target_local_ned_decode(&msg, &packet);
 
-        // exit if vehicle is not in Guided mode or Auto-Guided mode
-        if ((sub.control_mode != Mode::Number::GUIDED) && !(sub.control_mode == Mode::Number::AUTO && sub.auto_mode == Auto_NavGuided)) {
+        // exit if vehicle is not in a mode that accepts guided targets
+        if (!sub.flightmode->in_guided_mode()) {
             return;
         }
 
@@ -783,9 +783,8 @@ void GCS_MAVLINK_Sub::handle_message_set_position_target_global_int(const mavlin
         mavlink_set_position_target_global_int_t packet;
         mavlink_msg_set_position_target_global_int_decode(&msg, &packet);
 
-        // exit if vehicle is not in Guided, Auto-Guided, or Depth Hold modes
-        if ((sub.control_mode != Mode::Number::GUIDED)
-            && !(sub.control_mode == Mode::Number::AUTO && sub.auto_mode == Auto_NavGuided)
+        // exit if vehicle is not in a mode that accepts guided targets or in Depth Hold
+        if (!sub.flightmode->in_guided_mode()
             && !(sub.control_mode == Mode::Number::ALT_HOLD)) {
             return;
         }
