@@ -115,6 +115,7 @@ bool GCS_MAVLINK_Sub::get_target_location(Location &loc) const
             return true;
         }
         case Guided_Velocity:
+        case Guided_VelAccel:
         case Guided_Angle:
             // no fixed position target to report
             return false;

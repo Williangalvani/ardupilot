@@ -11,6 +11,11 @@
 static Vector3p posvelaccel_pos_target_neu_cm;
 static Vector3f posvelaccel_vel_target_neu_cms;
 static Vector3f posvelaccel_accel_target_neu_cmss;
+#if AP_EXTERNAL_BINDING_ENABLED
+// targets for Guided_VelAccel mode
+static Vector3f velaccel_vel_target_neu_cms;
+static Vector3f velaccel_accel_target_neu_cmss;
+#endif
 static uint32_t update_time_ms;
 
 struct {
@@ -143,6 +148,32 @@ void ModeGuided::guided_posvelaccel_control_start()
     set_auto_yaw_mode(AUTO_YAW_HOLD);
 }
 
+#if AP_EXTERNAL_BINDING_ENABLED
+// initialise guided mode's velocity and acceleration controller
+void ModeGuided::guided_velaccel_control_start()
+{
+    // set guided_mode to velocity and acceleration controller
+    sub.guided_mode = Guided_VelAccel;
+
+    // initialise horizontal speed, acceleration
+    position_control->NE_set_max_speed_accel_cm(sub.wp_nav.get_default_speed_NE_cms(), sub.wp_nav.get_wp_acceleration_cmss());
+    position_control->NE_set_correction_speed_accel_cm(sub.wp_nav.get_default_speed_NE_cms(), sub.wp_nav.get_wp_acceleration_cmss());
+
+    // set vertical speed and acceleration
+    // All limits must be positive
+    position_control->D_set_max_speed_accel_cm(sub.wp_nav.get_default_speed_down_cms(), sub.wp_nav.get_default_speed_up_cms(), sub.wp_nav.get_accel_D_cmss());
+    position_control->D_set_correction_speed_accel_cm(sub.wp_nav.get_default_speed_down_cms(), sub.wp_nav.get_default_speed_up_cms(), sub.wp_nav.get_accel_D_cmss());
+
+    // initialise velocity controller
+    position_control->D_init_controller();
+    position_control->NE_init_controller();
+
+    // pilot always controls yaw
+    sub.yaw_rate_only = false;
+    set_auto_yaw_mode(AUTO_YAW_HOLD);
+}
+#endif
+
 // initialise guided mode's angle controller
 void ModeGuided::guided_angle_control_start()
 {
@@ -274,6 +305,29 @@ void ModeGuided::guided_set_velocity(const Vector3f& velocity_neu_cms, bool use_
     position_control->set_vel_desired_NEU_cms(velocity_neu_cms);
 
 }
+
+#if AP_EXTERNAL_BINDING_ENABLED
+// guided_set_velaccel - sets guided mode's target velocity and acceleration
+void ModeGuided::guided_set_velaccel(const Vector3f& vel_neu_cms, const Vector3f& accel_neu_cmss, bool use_yaw, float yaw_cd, bool use_yaw_rate, float yaw_rate_cds, bool relative_yaw)
+{
+    // check we are in velocity and acceleration control mode
+    if (sub.guided_mode != Guided_VelAccel) {
+        guided_velaccel_control_start();
+    }
+
+    // set yaw state
+    guided_set_yaw_state(use_yaw, yaw_cd, use_yaw_rate, yaw_rate_cds, relative_yaw);
+
+    update_time_ms = AP_HAL::millis();
+    velaccel_vel_target_neu_cms = vel_neu_cms;
+    velaccel_accel_target_neu_cmss = accel_neu_cmss;
+
+#if HAL_LOGGING_ENABLED
+    // log target
+    sub.Log_Write_GuidedTarget(sub.guided_mode, Vector3f(), vel_neu_cms, accel_neu_cmss);
+#endif
+}
+#endif
 
 // expose the current Guided_PosVelAccel position target so the GCS layer can
 // report POSITION_TARGET_GLOBAL_INT in that submode.
@@ -443,6 +497,13 @@ void ModeGuided::run()
     case Guided_Angle:
         // run angle controller
         guided_angle_control_run();
+        break;
+
+    case Guided_VelAccel:
+#if AP_EXTERNAL_BINDING_ENABLED
+        // run velocity and acceleration controller
+        guided_velaccel_control_run();
+#endif
         break;
     }
 }
@@ -662,6 +723,90 @@ void ModeGuided::guided_posvelaccel_control_run()
         attitude_control->input_euler_angle_roll_pitch_yaw_cd(channel_roll->get_control_in(), channel_pitch->get_control_in(), get_auto_heading(), true);
     }
 }
+
+#if AP_EXTERNAL_BINDING_ENABLED
+// guided_velaccel_control_run - runs the guided velocity and acceleration controller
+// called from guided_run
+void ModeGuided::guided_velaccel_control_run()
+{
+    // if motors not enabled set throttle to zero and exit immediately
+    if (!motors.armed()) {
+        motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
+        // Sub vehicles do not stabilize roll/pitch/yaw when disarmed
+        attitude_control->set_throttle_out(NEUTRAL_THROTTLE,true,g.throttle_filt);
+        attitude_control->relax_attitude_controllers();
+        // initialise velocity controller
+        position_control->D_init_controller();
+        position_control->NE_init_controller();
+        return;
+    }
+
+    // process pilot's yaw input
+    float target_yaw_rate = 0;
+    if (!sub.failsafe.pilot_input) {
+        // get pilot's desired yaw rate
+        target_yaw_rate = sub.get_pilot_desired_yaw_rate(channel_yaw->get_control_in());
+        if (!is_zero(target_yaw_rate)) {
+            set_auto_yaw_mode(AUTO_YAW_HOLD);
+        } else {
+            if (sub.yaw_rate_only) {
+                set_auto_yaw_mode(AUTO_YAW_RATE);
+            } else {
+                set_auto_yaw_mode(AUTO_YAW_LOOK_AT_HEADING);
+            }
+        }
+    }
+
+    // set motors to full range
+    motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+
+    // set velocity and acceleration to zero and stop rotating if no updates received for 3 seconds
+    uint32_t tnow = AP_HAL::millis();
+    if (tnow - update_time_ms > GUIDED_VEL_TIMEOUT_MS) {
+        velaccel_vel_target_neu_cms.zero();
+        velaccel_accel_target_neu_cmss.zero();
+        if (sub.yaw_rate_only) {
+            sub.yaw_rate_only = false;
+            sub.mode_auto.set_auto_yaw_look_at_heading(attitude_control->get_att_target_euler_cd().z * 0.01f, 0.0f, 0, 0);
+        }
+    }
+
+    // send velocity and acceleration targets to position controller
+    position_control->input_vel_accel_NE_cm(velaccel_vel_target_neu_cms.xy(), velaccel_accel_target_neu_cmss.xy());
+    position_control->NE_stop_pos_stabilisation();
+    float vel_d_ms = -velaccel_vel_target_neu_cms.z * 0.01f;
+    position_control->input_vel_accel_D_m(vel_d_ms, -velaccel_accel_target_neu_cmss.z * 0.01f);
+    velaccel_vel_target_neu_cms.z = -vel_d_ms * 100.0f;
+
+    // run position controller
+    position_control->NE_update_controller();
+    position_control->D_update_controller();
+
+    float lateral_out, forward_out;
+    sub.translate_pos_control_rp(lateral_out, forward_out);
+
+    // Send to forward/lateral outputs
+    motors.set_lateral(lateral_out);
+    motors.set_forward(forward_out);
+
+    // call attitude controller
+    if (sub.auto_yaw_mode == AUTO_YAW_HOLD) {
+        // roll & pitch & yaw rate from pilot
+        attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw_cd(channel_roll->get_control_in(), channel_pitch->get_control_in(), target_yaw_rate);
+    } else if (sub.auto_yaw_mode == AUTO_YAW_LOOK_AT_HEADING) {
+        // roll, pitch from pilot, yaw & yaw_rate from auto_control
+        target_yaw_rate = sub.yaw_look_at_heading_slew * 100.0;
+        attitude_control->input_euler_angle_roll_pitch_slew_yaw_cd(channel_roll->get_control_in(), channel_pitch->get_control_in(), get_auto_heading(), target_yaw_rate);
+    } else if (sub.auto_yaw_mode == AUTO_YAW_RATE) {
+        // roll, pitch from pilot, yaw_rate from auto_control
+        target_yaw_rate = sub.yaw_look_at_heading_slew * 100.0;
+        attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw_cd(channel_roll->get_control_in(), channel_pitch->get_control_in(), target_yaw_rate);
+    } else {
+        // roll, pitch from pilot, yaw heading from auto_heading()
+        attitude_control->input_euler_angle_roll_pitch_yaw_cd(channel_roll->get_control_in(), channel_pitch->get_control_in(), get_auto_heading(), true);
+    }
+}
+#endif
 
 // guided_angle_control_run - runs the guided angle controller
 // called from guided_run

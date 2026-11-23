@@ -549,6 +549,34 @@ bool Sub::set_target_velocity_NED(const Vector3f& target_vel_ned_ms, bool align_
     return true;
 }
 
+// set target velocity and acceleration (for use by scripting)
+bool Sub::set_target_velaccel_NED(const Vector3f& target_vel_ned_ms, const Vector3f& target_accel_ned_mss, bool use_yaw, float yaw_deg, bool use_yaw_rate, float yaw_rate_degs, bool relative_yaw)
+{
+    // exit if vehicle is not in a mode that accepts guided targets
+    if (!flightmode->in_guided_mode()) {
+        return false;
+    }
+
+    const Vector3f vel_neu_cms(target_vel_ned_ms.x * 100.0f, target_vel_ned_ms.y * 100.0f, -target_vel_ned_ms.z * 100.0f);
+    const Vector3f accel_neu_cmss(target_accel_ned_mss.x * 100.0f, target_accel_ned_mss.y * 100.0f, -target_accel_ned_mss.z * 100.0f);
+
+    // without a yaw or yaw rate target hold a heading, as guided would otherwise return to a
+    // stale look-at heading. keep the heading already held by this controller, else latch the
+    // measured heading once; re-latching every update would chase a still-rotating target
+    if (!use_yaw && !use_yaw_rate) {
+        use_yaw = true;
+        relative_yaw = false;
+        if ((guided_mode == Guided_VelAccel) && (auto_yaw_mode == AUTO_YAW_LOOK_AT_HEADING) && !yaw_rate_only) {
+            yaw_deg = yaw_look_at_heading * 0.01f;
+        } else {
+            yaw_deg = ahrs.yaw_sensor * 0.01f;
+        }
+    }
+
+    mode_guided.guided_set_velaccel(vel_neu_cms, accel_neu_cmss, use_yaw, yaw_deg * 100.0f, use_yaw_rate, yaw_rate_degs * 100.0f, relative_yaw);
+    return true;
+}
+
 // Register a custom mode with given number and names
 AP_Vehicle::custom_mode_state* Sub::register_custom_mode(const uint8_t num, const char* full_name, const char* short_name)
 {

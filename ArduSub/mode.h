@@ -12,6 +12,7 @@ enum GuidedSubMode {
     Guided_Velocity,
     Guided_PosVelAccel,
     Guided_Angle,
+    Guided_VelAccel,
 };
 
 // Auto modes
@@ -255,6 +256,9 @@ public:
     bool guided_set_destination(const Vector3f& destination_neu_cm, bool use_yaw, float yaw_cd, bool use_yaw_rate, float yaw_rate_cds, bool relative_yaw, bool is_terrain_alt = false);
     void guided_set_velocity(const Vector3f& velocity_neu_cms);
     void guided_set_velocity(const Vector3f& velocity_neu_cms, bool use_yaw, float yaw_cd, bool use_yaw_rate, float yaw_rate_cds, bool relative_yaw);
+#if AP_EXTERNAL_BINDING_ENABLED
+    void guided_set_velaccel(const Vector3f& vel_neu_cms, const Vector3f& accel_neu_cmss, bool use_yaw, float yaw_cd, bool use_yaw_rate, float yaw_rate_cds, bool relative_yaw);
+#endif
     void guided_set_yaw_state(bool use_yaw, float yaw_cd, bool use_yaw_rate, float yaw_rate_cds, bool relative_angle);
     // fills pos with the current Guided_PosVelAccel position target (NEU cm
     // relative to EKF origin). returns false if not in Guided_PosVelAccel.
@@ -281,6 +285,10 @@ private:
     void guided_vel_control_start();
     void guided_posvelaccel_control_start();
     void guided_angle_control_start();
+#if AP_EXTERNAL_BINDING_ENABLED
+    void guided_velaccel_control_run();
+    void guided_velaccel_control_start();
+#endif
 };
 
 #if AP_EXTERNAL_BINDING_ENABLED
