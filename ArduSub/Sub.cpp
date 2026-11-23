@@ -465,7 +465,47 @@ void Sub::rc_loop()
 }
 #endif
 
+#if AP_EXTERNAL_BINDING_ENABLED || AP_EXTERNAL_CONTROL_ENABLED
+// set target location (for use by external control and scripting)
+bool Sub::set_target_location(const Location& target_loc)
+{
+    // exit if vehicle is not in a mode that accepts guided targets
+    if (!flightmode->in_guided_mode()) {
+        return false;
+    }
+
+    return mode_guided.guided_set_destination(target_loc);
+}
+#endif // AP_EXTERNAL_BINDING_ENABLED || AP_EXTERNAL_CONTROL_ENABLED
+
 #if AP_EXTERNAL_BINDING_ENABLED
+// set target position (for use by scripting)
+bool Sub::set_target_pos_NED(const Vector3f& target_pos_ned_m, bool use_yaw, float yaw_deg, bool use_yaw_rate, float yaw_rate_degs, bool yaw_relative, bool is_terrain_alt)
+{
+    // exit if vehicle is not in a mode that accepts guided targets
+    if (!flightmode->in_guided_mode()) {
+        return false;
+    }
+
+    const Vector3f pos_neu_cm(target_pos_ned_m.x * 100.0f, target_pos_ned_m.y * 100.0f, -target_pos_ned_m.z * 100.0f);
+
+    return mode_guided.guided_set_destination(pos_neu_cm, use_yaw, yaw_deg * 100.0f, use_yaw_rate, yaw_rate_degs * 100.0f, yaw_relative, is_terrain_alt);
+}
+
+// set target position and velocity (for use by scripting)
+bool Sub::set_target_posvel_NED(const Vector3f& target_pos_ned_m, const Vector3f& target_vel_ned_ms)
+{
+    // exit if vehicle is not in a mode that accepts guided targets
+    if (!flightmode->in_guided_mode()) {
+        return false;
+    }
+
+    const Vector3f pos_neu_cm(target_pos_ned_m.x * 100.0f, target_pos_ned_m.y * 100.0f, -target_pos_ned_m.z * 100.0f);
+    const Vector3f vel_neu_cms(target_vel_ned_ms.x * 100.0f, target_vel_ned_ms.y * 100.0f, -target_vel_ned_ms.z * 100.0f);
+
+    return mode_guided.guided_set_posvelaccel(pos_neu_cm, vel_neu_cms, Vector3f());
+}
+
 // set target position, velocity and acceleration (for use by scripting)
 bool Sub::set_target_posvelaccel_NED(const Vector3f& target_pos_ned_m, const Vector3f& target_vel_ned_ms, const Vector3f& target_accel_ned_mss, bool use_yaw, float yaw_deg, bool use_yaw_rate, float yaw_rate_degs, bool yaw_relative)
 {
@@ -479,6 +519,34 @@ bool Sub::set_target_posvelaccel_NED(const Vector3f& target_pos_ned_m, const Vec
     const Vector3f accel_neu_cmss(target_accel_ned_mss.x * 100.0f, target_accel_ned_mss.y * 100.0f, -target_accel_ned_mss.z * 100.0f);
 
     return mode_guided.guided_set_posvelaccel(pos_neu_cm, vel_neu_cms, accel_neu_cmss, use_yaw, yaw_deg * 100.0f, use_yaw_rate, yaw_rate_degs * 100.0f, yaw_relative);
+}
+
+// set target velocity (for use by scripting)
+bool Sub::set_target_velocity_NED(const Vector3f& target_vel_ned_ms, bool align_yaw_to_target)
+{
+    // exit if vehicle is not in a mode that accepts guided targets
+    if (!flightmode->in_guided_mode()) {
+        return false;
+    }
+
+    const Vector3f vel_neu_cms(target_vel_ned_ms.x * 100.0f, target_vel_ned_ms.y * 100.0f, -target_vel_ned_ms.z * 100.0f);
+
+    // optionally line up the sub with the velocity vector, otherwise hold a heading. keep the
+    // heading already held by this controller, else latch the measured heading once; re-latching
+    // every update would chase a still-rotating target
+    float yaw_cd = ahrs.yaw_sensor;
+    if ((guided_mode == Guided_Velocity) && (auto_yaw_mode == AUTO_YAW_LOOK_AT_HEADING) && !yaw_rate_only) {
+        yaw_cd = yaw_look_at_heading;
+    }
+    if (align_yaw_to_target) {
+        const float speed_sq = vel_neu_cms.xy().length_squared();
+        if (position_ok() && (speed_sq > (YAW_LOOK_AHEAD_MIN_SPEED * YAW_LOOK_AHEAD_MIN_SPEED))) {
+            yaw_cd = degrees(atan2f(vel_neu_cms.y, vel_neu_cms.x)) * 100.0f;
+        }
+    }
+
+    mode_guided.guided_set_velocity(vel_neu_cms, true, yaw_cd, false, 0.0f, false);
+    return true;
 }
 
 // Register a custom mode with given number and names

@@ -207,11 +207,11 @@ bool ModeGuided::guided_set_destination(const Location& dest_loc)
 // guided_set_destination - sets guided mode's target destination and target heading
 // Returns true if the fence is enabled and guided waypoint is within the fence
 // else return false if the waypoint is outside the fence
-bool ModeGuided::guided_set_destination(const Vector3f& destination_neu_cm, bool use_yaw, float yaw_cd, bool use_yaw_rate, float yaw_rate_cds, bool relative_yaw)
+bool ModeGuided::guided_set_destination(const Vector3f& destination_neu_cm, bool use_yaw, float yaw_cd, bool use_yaw_rate, float yaw_rate_cds, bool relative_yaw, bool is_terrain_alt)
 {
 #if AP_FENCE_ENABLED
     // reject destination if outside the fence
-    const Location dest_loc(destination_neu_cm, Location::AltFrame::ABOVE_ORIGIN);
+    const Location dest_loc(destination_neu_cm, is_terrain_alt ? Location::AltFrame::ABOVE_TERRAIN : Location::AltFrame::ABOVE_ORIGIN);
     if (!sub.fence.check_location_within_fence(dest_loc)) {
         LOGGER_WRITE_ERROR(LogErrorSubsystem::NAVIGATION, LogErrorCode::DEST_OUTSIDE_FENCE);
         // failure is propagated to GCS with NAK
@@ -229,8 +229,11 @@ bool ModeGuided::guided_set_destination(const Vector3f& destination_neu_cm, bool
 
     update_time_ms = AP_HAL::millis();
 
-    // no need to check return status because terrain data is not used
-    sub.wp_nav.set_wp_destination_NEU_cm(destination_neu_cm, false);
+    if (!sub.wp_nav.set_wp_destination_NEU_cm(destination_neu_cm, is_terrain_alt)) {
+        // failure to set destination can only be because of missing terrain data
+        LOGGER_WRITE_ERROR(LogErrorSubsystem::NAVIGATION, LogErrorCode::FAILED_TO_SET_DESTINATION);
+        return false;
+    }
 
 #if HAL_LOGGING_ENABLED
     // log target

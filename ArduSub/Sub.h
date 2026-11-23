@@ -633,6 +633,10 @@ public:
         return _singleton;
     }
 
+#if AP_EXTERNAL_BINDING_ENABLED || AP_EXTERNAL_CONTROL_ENABLED
+    bool set_target_location(const Location& target_loc) override;
+#endif // AP_EXTERNAL_BINDING_ENABLED || AP_EXTERNAL_CONTROL_ENABLED
+
 #if AP_EXTERNAL_BINDING_ENABLED
     // For Lua scripting, so index is 1..4, not 0..3
     bool is_button_pressed(uint8_t index);
@@ -641,7 +645,10 @@ public:
     uint8_t get_and_clear_button_count(uint8_t index);
 
     // Set targets in GUIDED mode
+    bool set_target_pos_NED(const Vector3f& target_pos_ned_m, bool use_yaw, float yaw_deg, bool use_yaw_rate, float yaw_rate_degs, bool yaw_relative, bool is_terrain_alt) override;
+    bool set_target_posvel_NED(const Vector3f& target_pos_ned_m, const Vector3f& target_vel_ned_ms) override;
     bool set_target_posvelaccel_NED(const Vector3f& target_pos_ned_m, const Vector3f& target_vel_ned_ms, const Vector3f& target_accel_ned_mss, bool use_yaw, float yaw_deg, bool use_yaw_rate, float yaw_rate_degs, bool yaw_relative) override;
+    bool set_target_velocity_NED(const Vector3f& vel_ned_ms, bool align_yaw_to_target) override;
 
     // Register a custom mode with given number and names
     AP_Vehicle::custom_mode_state* register_custom_mode(const uint8_t number, const char* full_name, const char* short_name) override;
