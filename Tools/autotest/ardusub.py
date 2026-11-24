@@ -1872,6 +1872,63 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
 
         self.disarm_vehicle()
 
+    def AutoIgnoresGuidedTargets(self):
+        '''check guided targets do not change an AUTO mission leg'''
+        self.set_parameter("WP_SPD", 0.5)
+        self.dive(-5, mode='ALT_HOLD')
+
+        self.upload_simple_relhome_mission([
+            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 0, 0, -5),
+            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 30, 0, -5),
+        ])
+        self.change_mode('AUTO')
+        self.wait_current_waypoint(2, timeout=120)
+        self.delay_sim_time(5, reason="vehicle to start the leg")
+        target = self.poll_message('POSITION_TARGET_GLOBAL_INT')
+
+        pos = self.assert_receive_message('LOCAL_POSITION_NED')
+        self.mav.mav.set_position_target_local_ned_send(
+            0,  # timestamp
+            1, 1,  # target system/component IDs
+            mavutil.mavlink.MAV_FRAME_LOCAL_NED,
+            (mavutil.mavlink.POSITION_TARGET_TYPEMASK_VX_IGNORE |
+             mavutil.mavlink.POSITION_TARGET_TYPEMASK_VY_IGNORE |
+             mavutil.mavlink.POSITION_TARGET_TYPEMASK_VZ_IGNORE |
+             mavutil.mavlink.POSITION_TARGET_TYPEMASK_AX_IGNORE |
+             mavutil.mavlink.POSITION_TARGET_TYPEMASK_AY_IGNORE |
+             mavutil.mavlink.POSITION_TARGET_TYPEMASK_AZ_IGNORE |
+             mavutil.mavlink.POSITION_TARGET_TYPEMASK_YAW_IGNORE |
+             mavutil.mavlink.POSITION_TARGET_TYPEMASK_YAW_RATE_IGNORE),
+            pos.x, pos.y + 20, pos.z,  # position target
+            0, 0, 0,  # velocity target
+            0, 0, 0,  # acceleration target
+            0, 0  # yaw, yawrate
+        )
+
+        reposition = self.offset_location_ne(self.get_location(), 0, 20)
+        reposition.set_alt_m(-5, AltFrame.ABOVE_HOME)
+        frame, alt = self.mav_frame_and_alt_m(reposition)
+        self.run_cmd_int(
+            mavutil.mavlink.MAV_CMD_DO_REPOSITION,
+            p2=0,  # no MAV_DO_REPOSITION_FLAGS_CHANGE_MODE
+            x=int(reposition.lat * 1e7),
+            y=int(reposition.lng * 1e7),
+            z=alt,
+            frame=frame,
+            want_result=mavutil.mavlink.MAV_RESULT_DENIED,
+        )
+
+        self.delay_sim_time(2, reason="target to change, if it is going to")
+        new_target = self.poll_message('POSITION_TARGET_GLOBAL_INT')
+        if (new_target.lat_int, new_target.lon_int) != (target.lat_int, target.lon_int):
+            raise NotAchievedException(
+                f"AUTO target moved from ({target.lat_int}, {target.lon_int}) "
+                f"to ({new_target.lat_int}, {new_target.lon_int})")
+
+        wp_loc = self.offset_location_ne(self.home_position_as_location(), 30, 0)
+        self.wait_location(wp_loc, accuracy=2, height_accuracy=None, timeout=120)
+        self.disarm_vehicle()
+
     def GuidedAttitudeForwardLatch(self):
         '''check forward stick in ALT_HOLD does not keep driving guided attitude control'''
         self.dive(-5, mode='ALT_HOLD')
@@ -1955,6 +2012,7 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
             self.IgnoreGPSDrift,
             self.GuidedPosVelAccel,
             self.GuidedAboveTerrain,
+            self.AutoIgnoresGuidedTargets,
             self.GuidedAttitudeForwardLatch,
         ])
 
