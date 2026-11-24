@@ -33,6 +33,9 @@ uint8_t GCS_MAVLINK_Sub::base_mode() const
         // positions", which APM does not currently do
         break;
     default:
+        if (sub.flightmode->in_guided_mode()) {
+            _base_mode |= MAV_MODE_FLAG_GUIDED_ENABLED;
+        }
         break;
     }
 
@@ -906,7 +909,7 @@ int16_t GCS_MAVLINK_Sub::high_latency_target_altitude() const
     UNUSED_RESULT(ahrs.get_location(global_position_current));
 
     //return units are m
-    if (sub.control_mode == Mode::Number::AUTO || sub.control_mode == Mode::Number::GUIDED) {
+    if (sub.control_mode == Mode::Number::AUTO || sub.flightmode->in_guided_mode()) {
         return 0.01 * (global_position_current.alt + sub.pos_control.get_pos_error_U_cm());
     }
     return 0;
@@ -916,7 +919,7 @@ int16_t GCS_MAVLINK_Sub::high_latency_target_altitude() const
 uint8_t GCS_MAVLINK_Sub::high_latency_tgt_heading() const
 {
     // return units are deg/2
-    if (sub.control_mode == Mode::Number::AUTO || sub.control_mode == Mode::Number::GUIDED) {
+    if (sub.control_mode == Mode::Number::AUTO || sub.flightmode->in_guided_mode()) {
         // need to convert -18000->18000 to 0->360/2
         return wrap_360_cd(sub.wp_nav.get_wp_bearing_to_destination_cd()) / 200;
     }
@@ -925,7 +928,7 @@ uint8_t GCS_MAVLINK_Sub::high_latency_tgt_heading() const
     
 uint16_t GCS_MAVLINK_Sub::high_latency_tgt_dist_dam() const
 {
-    if (sub.control_mode == Mode::Number::AUTO || sub.control_mode == Mode::Number::GUIDED) {
+    if (sub.control_mode == Mode::Number::AUTO || sub.flightmode->in_guided_mode()) {
         return MIN(static_cast<uint16_t>(sub.wp_nav.get_wp_distance_to_destination_cm() * 1e-3), UINT16_MAX);
     }
     return 0;
@@ -934,7 +937,7 @@ uint16_t GCS_MAVLINK_Sub::high_latency_tgt_dist_dam() const
 uint8_t GCS_MAVLINK_Sub::high_latency_tgt_airspeed() const
 {
     // return units are m/s*5
-    if (sub.control_mode == Mode::Number::AUTO || sub.control_mode == Mode::Number::GUIDED) {
+    if (sub.control_mode == Mode::Number::AUTO || sub.flightmode->in_guided_mode()) {
         return MIN((sub.pos_control.get_vel_desired_NEU_cms().length()/100) * 5, UINT8_MAX);
     }
     return 0;

@@ -37,6 +37,12 @@ void GCS_Sub::update_vehicle_sensor_status_flags()
         control_sensors_health |= MAV_SYS_STATUS_SENSOR_XY_POSITION_CONTROL;
         break;
     default:
+        if (sub.flightmode->in_guided_mode()) {
+            control_sensors_enabled |= MAV_SYS_STATUS_SENSOR_Z_ALTITUDE_CONTROL;
+            control_sensors_health |= MAV_SYS_STATUS_SENSOR_Z_ALTITUDE_CONTROL;
+            control_sensors_enabled |= MAV_SYS_STATUS_SENSOR_XY_POSITION_CONTROL;
+            control_sensors_health |= MAV_SYS_STATUS_SENSOR_XY_POSITION_CONTROL;
+        }
         break;
     }
 
