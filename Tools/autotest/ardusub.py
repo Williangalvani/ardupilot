@@ -1972,6 +1972,8 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
         self.set_parameters({
             "SCR_ENABLE": 1,
             "WP_SPD": 0.5,
+            "CIRCLE_RADIUS_M": 3,
+            "CIRCLE_RATE": 8,
         })
         # the autotest selects a stage with SBT_STAGE; the script reports
         # "SBT: PASS name" or "SBT: FAIL name info" for the checks it can
@@ -1982,11 +1984,15 @@ assert(param:add_table(PARAM_TABLE_KEY, "SBT_", 1), "could not add param table")
 assert(param:add_param(PARAM_TABLE_KEY, 1, "STAGE", 0), "could not add STAGE param")
 local SBT_STAGE = Parameter("SBT_STAGE")
 
+local OUTPUT = { ROLL = 1, PITCH = 2, THROTTLE = 3, YAW = 4, LATERAL = 5,
+                 MAINSAIL = 6, WINGSAIL = 7, WALKING_HEIGHT = 8, FORWARD = 9 }
+local ALT_FRAME_ABSOLUTE = 0
 local STREAM_S = 12
 
 local stage = 0
 local stage_start_ms = millis()
 local start_pos      -- position NED from the EKF origin when the stage started
+local start_yaw_deg  -- heading when the stage started
 local state = {}     -- state of the current stage
 
 local function vec3(x, y, z)
@@ -2019,6 +2025,10 @@ local function check(ok)
     end
 end
 
+local function near(value, want, accuracy)
+    return value ~= nil and math.abs(value - want) <= accuracy
+end
+
 local STAGES = {}
 
 -- every setter refuses outside guided modes
@@ -2034,6 +2044,12 @@ STAGES[1] = function(_, first)
         vehicle:set_target_posvel_NED(start_pos, zero),
         vehicle:set_target_posvelaccel_NED(start_pos, zero, zero, false, 0, false, 0, false),
         vehicle:set_target_velocity_NED(zero),
+        vehicle:set_target_velaccel_NED(zero, zero, false, 0, false, 0, false),
+        vehicle:set_target_angle_and_climbrate(0, 0, 0, 0, false, 0),
+        vehicle:set_target_rate_and_throttle(0, 0, 0, 0.5),
+        vehicle:set_target_angle_and_rate_and_throttle(0, 0, 0, 0, 0, 0, 0.5),
+        sub:set_target_forward_lateral(0, 0),
+        vehicle:update_target_location(loc, loc),
     }
     for i, result in ipairs(results) do
         if result then
@@ -2041,7 +2057,7 @@ STAGES[1] = function(_, first)
             return
         end
     end
-    report("setters_false", true)
+    report("setters_false", vehicle:nav_script_time() == nil, "nav_script_time")
 end
 
 STAGES[2] = function(_, first)
@@ -2049,7 +2065,52 @@ STAGES[2] = function(_, first)
         state.target = ahrs:get_location()
         state.target:offset(8, 0)
         report("target_location", vehicle:set_target_location(state.target))
+        return
     end
+    if state.checked then
+        return
+    end
+    state.checked = true
+    local got = vehicle:get_target_location()
+    if not got then
+        report("get_target_loc", false, "nil")
+        return
+    end
+    local dist = got:get_distance(state.target)
+    local dalt = got:get_alt_m(ALT_FRAME_ABSOLUTE) - state.target:get_alt_m(ALT_FRAME_ABSOLUTE)
+    report("get_target_loc", dist < 0.1 and math.abs(dalt) < 0.1, string.format("%.2f %.2f", dist, dalt))
+end
+
+STAGES[3] = function(_, first)
+    if not first then
+        return
+    end
+    local old = vehicle:get_target_location()
+    if not old then
+        report("update_target_loc", false, "nil")
+        return
+    end
+    local wrong = old:copy()
+    wrong:offset(2, 0)
+    local new = old:copy()
+    new:offset(0, 8)
+    local refused = not vehicle:update_target_location(wrong, new)
+    local accepted = vehicle:update_target_location(old, new)
+    report("update_target_loc", refused and accepted, tostring(refused) .. " " .. tostring(accepted))
+end
+
+STAGES[4] = function(_, first)
+    if not first then
+        return
+    end
+    local loc = ahrs:get_location()
+    loc:offset(-25, 0)
+    local set = vehicle:set_target_location(loc)
+    local fast = vehicle:set_desired_speed(1.0)
+    local zero_refused = not vehicle:set_desired_speed(0)
+    local negative_refused = not vehicle:set_desired_speed(-1)
+    report("desired_speed", set and fast and zero_refused and negative_refused,
+           string.format("%s %s %s %s", tostring(set), tostring(fast), tostring(zero_refused), tostring(negative_refused)))
 end
 
 STAGES[5] = function(_, first)
@@ -2083,9 +2144,129 @@ end
 STAGES[8] = function(t)
     local moving = t <= STREAM_S
     check(vehicle:set_target_velocity_NED(moving and vec3(0, -0.4, 0) or Vector3f()))
+    if t > 1 and not state.fwd_lat then
+        state.fwd_lat = true
+        report("fwd_lat_not_angle", not sub:set_target_forward_lateral(0.5, 0))
+    end
     if not moving then
         report_once("velocity_NED", not state.failed)
     end
+end
+
+-- stops sending part way through, for the velocity-acceleration timeout
+STAGES[9] = function(t)
+    if t <= STREAM_S then
+        check(vehicle:set_target_velaccel_NED(vec3(-0.3, 0, 0.2), Vector3f(), true, 45, false, 0, false))
+    elseif not state.stopped then
+        state.stopped = true
+        report("velaccel_NED", not state.failed)
+        gcs:send_text(6, "SBT: stage 9 stop")
+    end
+end
+
+STAGES[10] = function(t)
+    local moving = t <= STREAM_S
+    check(vehicle:set_target_angle_and_climbrate(0, 0, 135, moving and 0.25 or 0, false, 0))
+    if not moving then
+        report_once("angle_climbrate", not state.failed)
+    end
+end
+
+-- stops sending part way through, for the attitude timeout from rate control
+STAGES[11] = function(t)
+    if t <= 8 then
+        check(vehicle:set_target_rate_and_throttle(0, 0, 15, 0.5))
+        if t > 4 and not state.outputs then
+            state.outputs = true
+            local yaw = vehicle:get_control_output(OUTPUT.YAW)
+            local throttle = vehicle:get_control_output(OUTPUT.THROTTLE)
+            report("rate_outputs", yaw ~= nil and yaw > 0 and near(throttle, 0.5, 0.05),
+                   tostring(yaw) .. " " .. tostring(throttle))
+        end
+    elseif not state.stopped then
+        state.stopped = true
+        report("rate_throttle", not state.failed)
+        gcs:send_text(6, "SBT: stage 11 stop")
+    end
+end
+
+STAGES[12] = function(t)
+    if t <= 8 then
+        check(vehicle:set_target_angle_and_rate_and_throttle(20, 0, start_yaw_deg, 0, 0, 0, 0.4))
+        if t > 5 and not state.outputs then
+            state.outputs = true
+            local roll = vehicle:get_control_output(OUTPUT.ROLL)
+            local throttle = vehicle:get_control_output(OUTPUT.THROTTLE)
+            report("angle_outputs", near(roll, 0, 1) and near(throttle, 0.4, 0.05),
+                   tostring(roll) .. " " .. tostring(throttle))
+        end
+    else
+        check(vehicle:set_target_angle_and_rate_and_throttle(0, 0, start_yaw_deg, 0, 0, 0, 0.5))
+        report_once("angle_rate_thr", not state.failed)
+    end
+end
+
+-- stops sending part way through, for the attitude timeout with forward and lateral thrust
+STAGES[13] = function(t)
+    if t <= 8 then
+        check(vehicle:set_target_angle_and_rate_and_throttle(0, 0, start_yaw_deg, 0, 0, 0, 0.5))
+        check(sub:set_target_forward_lateral(0.4, -0.3))
+        if t > 3 and not state.outputs then
+            state.outputs = true
+            local forward = vehicle:get_control_output(OUTPUT.FORWARD)
+            local lateral = vehicle:get_control_output(OUTPUT.LATERAL)
+            report("fwd_lat_outputs", near(forward, 0.4, 0.01) and near(lateral, -0.3, 0.01),
+                   tostring(forward) .. " " .. tostring(lateral))
+        end
+    elseif not state.stopped then
+        state.stopped = true
+        report("forward_lateral", not state.failed)
+        gcs:send_text(6, "SBT: stage 13 stop")
+    elseif t > 11 and not state.timeout then
+        state.timeout = true
+        local forward = vehicle:get_control_output(OUTPUT.FORWARD)
+        local lateral = vehicle:get_control_output(OUTPUT.LATERAL)
+        report("fwd_lat_timeout", forward == 0 and lateral == 0, tostring(forward) .. " " .. tostring(lateral))
+    end
+end
+
+STAGES[14] = function(_, first)
+    if not first then
+        return
+    end
+    report("ekf_failsafe", vehicle:has_ekf_failsafed() == false)
+    local ranges = {
+        [OUTPUT.ROLL] = { -1, 1 },
+        [OUTPUT.PITCH] = { -1, 1 },
+        [OUTPUT.THROTTLE] = { 0, 1 },
+        [OUTPUT.YAW] = { -1, 1 },
+        [OUTPUT.LATERAL] = { -1, 1 },
+        [OUTPUT.FORWARD] = { -1, 1 },
+    }
+    for output, range in pairs(ranges) do
+        local value = vehicle:get_control_output(output)
+        if value == nil or value < range[1] or value > range[2] then
+            report("control_outputs", false, tostring(output) .. " " .. tostring(value))
+            return
+        end
+    end
+    for _, output in ipairs({ OUTPUT.MAINSAIL, OUTPUT.WINGSAIL, OUTPUT.WALKING_HEIGHT }) do
+        if vehicle:get_control_output(output) ~= nil then
+            report("control_outputs", false, output)
+            return
+        end
+    end
+    report("control_outputs", true)
+end
+
+STAGES[15] = function(_, first)
+    if not first then
+        return
+    end
+    local radius = vehicle:get_circle_radius()
+    local want = param:get("CIRCLE_RADIUS_M")
+    report("circle_radius", near(radius, want, 0.01), tostring(radius) .. " " .. tostring(want))
+    report("circle_rate", vehicle:set_circle_rate(-5))
 end
 
 local function update()
@@ -2095,6 +2276,7 @@ local function update()
         stage = want
         stage_start_ms = millis()
         start_pos = ahrs:get_relative_position_NED_origin()
+        start_yaw_deg = math.deg(ahrs:get_yaw_rad())
         state = {}
         gcs:send_text(6, string.format("SBT: stage %d start", stage))
     end
@@ -2120,6 +2302,14 @@ return update, 1000
             if "FAIL" in m.text:
                 raise NotAchievedException(m.text)
 
+        def wait_hold(timeout=20):
+            '''the vehicle should come to a stop, level, holding depth'''
+            self.wait_groundspeed(0, 0.1, minimum_duration=3, timeout=timeout)
+            self.wait_velocity_ned((None, None, 0), accuracy=0.1, minimum_duration=2, timeout=timeout)
+            self.wait_roll(0, 3, minimum_duration=2, timeout=timeout)
+            self.wait_pitch(0, 3, minimum_duration=2, timeout=timeout)
+            self.assert_mode_is('GUIDED')
+
         self.dive(-10, mode='ALT_HOLD')
 
         self.start_subtest("Setters return false outside guided modes")
@@ -2128,11 +2318,23 @@ return update, 1000
 
         self.change_mode('GUIDED')
 
-        self.start_subtest("set_target_location")
+        self.start_subtest("set_target_location and get_target_location")
         target = self.offset_location_ne(self.get_location(), 8, 0)
         stage(2)
         result("target_location")
+        result("get_target_loc")
         self.wait_location(target, accuracy=1, height_accuracy=1, timeout=60)
+
+        self.start_subtest("update_target_location")
+        target = self.offset_location_ne(target, 0, 8)
+        stage(3)
+        result("update_target_loc")
+        self.wait_location(target, accuracy=1, height_accuracy=1, timeout=60)
+
+        self.start_subtest("set_desired_speed")
+        stage(4)
+        result("desired_speed")
+        self.wait_groundspeed(0.85, 1.15, minimum_duration=3, timeout=30)
 
         self.start_subtest("set_target_pos_NED")
         stage(5)
@@ -2157,12 +2359,175 @@ return update, 1000
         stage(8)
         self.wait_velocity_ned((None, -0.4, None), timeout=12)
         self.wait_heading(0, minimum_duration=2, timeout=10)
+        result("fwd_lat_not_angle")
         result("velocity_NED")
+
+        self.start_subtest("set_target_velaccel_NED and its timeout")
+        stage(9)
+        self.wait_velocity_ned((-0.3, None, 0.2), timeout=12)
+        self.wait_heading(45, minimum_duration=1, timeout=10)
+        self.wait_statustext("SBT: stage 9 stop", check_context=True)
+        result("velaccel_NED")
+        self.wait_velocity_ned((0, 0, 0), minimum_duration=3, timeout=20)
+        self.assert_mode_is('GUIDED')
+
+        self.start_subtest("set_target_angle_and_climbrate")
+        stage(10)
+        self.wait_velocity_ned((None, None, -0.25), timeout=12)
+        self.wait_heading(135, minimum_duration=1, timeout=12)
+        result("angle_climbrate")
+
+        self.start_subtest("set_target_rate_and_throttle and the attitude timeout")
+        stage(11)
+        self.wait_yaw_speed(math.radians(15), accuracy=math.radians(3), minimum_duration=2, timeout=8)
+        result("rate_outputs")
+        self.wait_statustext("SBT: stage 11 stop", check_context=True)
+        result("rate_throttle")
+        self.wait_yaw_speed(0, accuracy=math.radians(2), minimum_duration=3, timeout=10)
+        wait_hold()
+
+        self.start_subtest("set_target_angle_and_rate_and_throttle")
+        stage(12)
+        self.wait_roll(20, 4, minimum_duration=2, timeout=8)
+        self.wait_and_maintain_range(
+            "descent rate",
+            0.05,
+            1,
+            current_value_getter=lambda: self.assert_receive_message('LOCAL_POSITION_NED').vz,
+            timeout=8,
+            minimum_duration=1,
+        )
+        result("angle_outputs")
+        result("angle_rate_thr")
+
+        self.start_subtest("set_target_forward_lateral and the attitude timeout")
+        stage(13)
+        self.wait_and_maintain_range(
+            "forward velocity",
+            0.2,
+            2,
+            current_value_getter=lambda: self.get_body_velocity()[0],
+            timeout=8,
+            minimum_duration=1,
+        )
+        self.wait_and_maintain_range(
+            "right velocity",
+            -2,
+            -0.1,
+            current_value_getter=lambda: self.get_body_velocity()[1],
+            timeout=8,
+            minimum_duration=1,
+        )
+        result("fwd_lat_outputs")
+        self.wait_statustext("SBT: stage 13 stop", check_context=True)
+        result("forward_lateral")
+        result("fwd_lat_timeout")
+        wait_hold(timeout=30)
+
+        self.start_subtest("get_control_output and has_ekf_failsafed")
+        stage(14)
+        result("ekf_failsafe")
+        result("control_outputs")
+
+        self.start_subtest("get_circle_radius and set_circle_rate")
+        self.change_mode('CIRCLE')
+        self.wait_yaw_speed(math.radians(8), accuracy=math.radians(2), minimum_duration=3, timeout=30)
+        stage(15)
+        result("circle_radius")
+        result("circle_rate")
+        self.wait_yaw_speed(math.radians(-5), accuracy=math.radians(1.5), minimum_duration=3, timeout=30)
 
         failure = self.statustext_in_collections("SBT: FAIL")
         if failure is not None:
             raise NotAchievedException(failure.text)
 
+        self.disarm_vehicle()
+
+    def ScriptingNavScriptTime(self):
+        '''test NAV_SCRIPT_TIME mission commands'''
+        self.context_collect('STATUSTEXT')
+        self.set_parameter("SCR_ENABLE", 1)
+        # command 1 drives north at arg1 m/s for arg2 seconds then reports
+        # done; command 2 does nothing, so the mission item times out
+        self.install_script_content_context("sub-nav-script-time.lua", """
+local last_id
+local done_id
+local start_ms
+
+local function update()
+    local id, cmd, arg1, arg2 = vehicle:nav_script_time()
+    if id then
+        if id ~= last_id then
+            last_id = id
+            start_ms = millis()
+            gcs:send_text(6, string.format("NST: start id %d cmd %d", id, cmd))
+        end
+        if cmd == 1 and id ~= done_id then
+            if (millis() - start_ms):tofloat() * 0.001 < arg2 then
+                local vel = Vector3f()
+                vel:x(arg1)
+                vehicle:set_target_velocity_NED(vel)
+            else
+                done_id = id
+                vehicle:nav_script_time_done(id)
+                gcs:send_text(6, string.format("NST: done id %d", id))
+            end
+        end
+    end
+    return update, 50
+end
+
+return update()
+""")
+        self.reboot_sitl()
+
+        speed = 0.4
+        duration = 5
+        timeout = 5
+        self.upload_simple_relhome_mission([
+            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 0, 0, -5),
+            self.create_MISSION_ITEM_INT(
+                mavutil.mavlink.MAV_CMD_NAV_SCRIPT_TIME,
+                p1=1,  # command
+                p2=30,  # timeout
+                p3=speed,  # arg1
+                p4=duration,  # arg2
+            ),
+            self.create_MISSION_ITEM_INT(
+                mavutil.mavlink.MAV_CMD_NAV_SCRIPT_TIME,
+                p1=2,  # command
+                p2=timeout,
+            ),
+            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 0, 0, -5),
+        ])
+
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.change_mode('AUTO')
+
+        self.start_subtest("Script drives the vehicle, then completes the command")
+        self.wait_current_waypoint(2, timeout=120)
+        self.wait_statustext("NST: start id 1 cmd 1", check_context=True)
+        start = self.assert_receive_message('LOCAL_POSITION_NED')
+        self.wait_velocity_ned((speed, None, None), minimum_duration=1, timeout=duration)
+        self.wait_statustext("NST: done id 1", check_context=True, timeout=duration + 5)
+        self.wait_current_waypoint(3, timeout=2)
+        end = self.assert_receive_message('LOCAL_POSITION_NED')
+        moved = end.x - start.x
+        self.progress(f"Moved {moved:.2f}m north")
+        if moved < 0.5 * speed * duration:
+            raise NotAchievedException(f"Moved {moved:.2f}m north, want at least {0.5 * speed * duration:.2f}m")
+
+        self.start_subtest("Command times out when the script does not complete it")
+        tstart = self.get_sim_time()
+        self.wait_statustext("NST: start id 2 cmd 2", check_context=True)
+        self.wait_current_waypoint(4, timeout=timeout + 5)
+        elapsed = self.get_sim_time_cached() - tstart
+        self.progress(f"Command timed out after {elapsed:.1f}s")
+        if elapsed < timeout - 1:
+            raise NotAchievedException(f"Command finished after {elapsed:.1f}s, before its {timeout}s timeout")
+
+        self.wait_location(self.home_position_as_location(), accuracy=3, height_accuracy=None, timeout=60)
         self.disarm_vehicle()
 
     def AutoIgnoresGuidedTargets(self):
@@ -2307,6 +2672,7 @@ return update, 1000
             self.GuidedAboveTerrain,
             self.ScriptingCustomMode,
             self.ScriptingSubBindings,
+            self.ScriptingNavScriptTime,
             self.AutoIgnoresGuidedTargets,
             self.GuidedAttitudeForwardLatch,
         ])
