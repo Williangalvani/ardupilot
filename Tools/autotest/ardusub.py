@@ -1966,6 +1966,94 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
         self.wait_mode(custom_mode, timeout=10)
         self.disarm_vehicle()
 
+    def ScriptingCustomModeExamples(self):
+        '''test the Sub stabilize and surftrak custom mode example scripts'''
+        self.set_parameters({
+            # AVAILABLE_MODES after the first is sent on the params stream, off by default on Sub
+            "MAV1_PARAMS": 10,
+            "MAV_GCS_SYSID": self.mav.source_system,
+        })
+        self.install_example_script_context("Sub_custom_mode_stabilize.lua")
+        self.install_example_script_context("Sub_custom_mode_surftrak.lua")
+        # a scripted rangefinder over a seafloor 20m deep which rises 10m
+        # starting 5m south of where the vehicle arms, this enables scripting and reboots
+        self.prepare_synthetic_seafloor_test(sea_floor_depth=20, rf_target=10)
+
+        self.start_subtest("AVAILABLE_MODES lists both custom modes")
+        self.assert_available_modes({
+            19: "Manual",
+            0: "Stabilize",
+            1: "Acro",
+            2: "Depth Hold",
+            21: "Surftrak",
+            16: "Position Hold",
+            3: "Auto",
+            4: "Guided",
+            7: "Circle",
+            9: "Surface",
+            20: "Motor Detection",
+            102: "Script Stabilize",
+            103: "Script Surftrak",
+        }, not_user_selectable=[])
+
+        def sstk_target():
+            '''return the distance target from the next report by the surftrak script'''
+            m = self.wait_statustext(r"SSTK target ([\d.]+) m rangefinder ([\d.]+) m", regex=True, timeout=5)
+            return float(re.match(r"SSTK target ([\d.]+)", m.text).group(1))
+
+        self.start_subtest("SSTK holds the distance above a rising seafloor")
+        self.dive(-12, mode='ALT_HOLD')
+        start_alt = self.get_altitude(relative=True)
+        self.change_mode(103)
+        target = sstk_target()
+        # the vehicle starts facing south, over the rising seafloor
+        self.set_rc(Joystick.Forward, 1650)
+        self.watch_true_distance_maintained(target, delta=0.75, timeout=20)
+        self.set_rc(Joystick.Forward, 1500)
+        climbed = self.get_altitude(relative=True) - start_alt
+        self.progress(f"Climbed {climbed:.2f}m with the seafloor")
+        if climbed < 1.5:
+            raise NotAchievedException(f"Did not follow the seafloor up, climbed {climbed:.2f}m")
+
+        self.start_subtest("SSTK throttle stick moves the distance target")
+        self.wait_groundspeed(0, 0.1, minimum_duration=2, timeout=30)
+        old_target = sstk_target()
+        self.set_rc(Joystick.Throttle, 1900)
+        self.delay_sim_time(3, reason="pilot climb")
+        self.set_rc(Joystick.Throttle, 1500)
+        self.delay_sim_time(3, reason="distance target to settle")
+        new_target = sstk_target()
+        if new_target < old_target + 0.75:
+            raise NotAchievedException(f"Distance target did not move up: {old_target:.2f}m to {new_target:.2f}m")
+        self.watch_true_distance_maintained(new_target, delta=0.5, timeout=5)
+
+        self.start_subtest("SSTB holds depth with neutral sticks")
+        self.dive(-5, mode='ALT_HOLD')
+        self.change_mode(102)
+        # neutral throttle gives no vertical thrust and the simulated vehicle is slightly buoyant
+        self.watch_altitude_maintained(delta=1.5, timeout=10)
+
+        self.start_subtest("SSTB roll stick rolls the vehicle")
+        self.set_rc(Joystick.Roll, 1800)
+        self.wait_and_maintain_range(
+            "roll",
+            8,
+            45,
+            current_value_getter=lambda: math.degrees(self.assert_receive_message('ATTITUDE').roll),
+            timeout=10,
+            minimum_duration=2,
+        )
+        self.set_rc(Joystick.Roll, 1500)
+        self.wait_roll(0, 3, timeout=10, minimum_duration=2)
+
+        self.start_subtest("SSTB forward stick drives forward")
+        self.set_rc(Joystick.Forward, 1700)
+        self.wait_groundspeed(0.3, 5, timeout=20, minimum_duration=2)
+        self.set_rc(Joystick.Forward, 1500)
+        self.wait_groundspeed(0, 0.1, timeout=30, minimum_duration=2)
+        self.assert_mode_is(102)
+        self.disarm_vehicle()
+
     def ScriptingSubBindings(self):
         '''test the Sub scripting bindings, one at a time'''
         self.context_collect('STATUSTEXT')
@@ -2671,6 +2759,7 @@ return update()
             self.GuidedPosVelAccel,
             self.GuidedAboveTerrain,
             self.ScriptingCustomMode,
+            self.ScriptingCustomModeExamples,
             self.ScriptingSubBindings,
             self.ScriptingNavScriptTime,
             self.AutoIgnoresGuidedTargets,
