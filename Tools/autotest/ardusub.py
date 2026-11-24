@@ -1872,6 +1872,299 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
 
         self.disarm_vehicle()
 
+    def wait_velocity_ned(self, want, accuracy=0.1, timeout=30, minimum_duration=2):
+        '''wait for the LOCAL_POSITION_NED velocity to match want, a tuple
+        of (vx, vy, vz) in m/s, where None ignores that axis'''
+        def get_error():
+            m = self.assert_receive_message('LOCAL_POSITION_NED')
+            return max(abs(got - w) for (got, w) in zip((m.vx, m.vy, m.vz), want) if w is not None)
+
+        self.wait_and_maintain_range(
+            f"velocity error from {want}",
+            0,
+            accuracy,
+            current_value_getter=get_error,
+            timeout=timeout,
+            minimum_duration=minimum_duration,
+        )
+
+    def get_body_velocity(self):
+        '''return the (forward, right) velocity in m/s'''
+        m = self.assert_receive_message('LOCAL_POSITION_NED')
+        yaw = self.assert_receive_message('ATTITUDE').yaw
+        forward = m.vx * math.cos(yaw) + m.vy * math.sin(yaw)
+        right = -m.vx * math.sin(yaw) + m.vy * math.cos(yaw)
+        return (forward, right)
+
+    def ScriptingCustomMode(self):
+        '''test a custom mode registered by scripting'''
+        custom_mode = 100
+        self.set_parameters({
+            "SCR_ENABLE": 1,
+            "BTN15_FUNCTION": 14,  # mode_custom_1
+            "WP_SPD": 0.5,
+            # AVAILABLE_MODES after the first is sent on the params stream, off by default on Sub
+            "MAV1_PARAMS": 10,
+            "MAV_GCS_SYSID": self.mav.source_system,
+        })
+        self.install_example_script_context("Sub_custom_mode_velocity.lua")
+        self.reboot_sitl()
+        self.wait_ready_to_arm()
+
+        self.start_subtest("AVAILABLE_MODES lists the custom mode")
+        self.assert_available_modes({
+            19: "Manual",
+            0: "Stabilize",
+            1: "Acro",
+            2: "Depth Hold",
+            21: "Surftrak",
+            16: "Position Hold",
+            3: "Auto",
+            4: "Guided",
+            7: "Circle",
+            9: "Surface",
+            20: "Motor Detection",
+            custom_mode: "Script Velocity",
+        }, not_user_selectable=[])
+
+        self.start_subtest("Script blocks entry while disarmed")
+        self.run_cmd(
+            mavutil.mavlink.MAV_CMD_DO_SET_MODE,
+            p1=mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+            p2=custom_mode,
+            want_result=mavutil.mavlink.MAV_RESULT_FAILED,
+        )
+        self.assert_mode('MANUAL')
+
+        self.start_subtest("Script flies the vehicle from the pilot's forward stick")
+        self.dive(-5, mode='ALT_HOLD')
+        self.change_mode(custom_mode)
+        self.set_rc(Joystick.Forward, 1700)
+        self.wait_and_maintain_range(
+            "forward velocity",
+            0.25,
+            0.6,
+            current_value_getter=lambda: self.get_body_velocity()[0],
+            timeout=30,
+            minimum_duration=2,
+        )
+        self.set_rc(Joystick.Forward, 1500)
+        self.wait_groundspeed(0, 0.05, minimum_duration=2, timeout=30)
+        self.assert_mode_is(custom_mode)
+
+        self.start_subtest("Joystick button enters the custom mode")
+        self.change_mode('ALT_HOLD')
+
+        def send_buttons(buttons, duration):
+            tstart = self.get_sim_time()
+            while self.get_sim_time_cached() - tstart < duration:
+                self.mav.mav.manual_control_send(1, 0, 0, 500, 0, buttons)
+                self.delay_sim_time(0.1, reason="MANUAL_CONTROL send interval")
+
+        send_buttons(1 << 15, 0.5)
+        send_buttons(0, 0.5)
+        self.wait_mode(custom_mode, timeout=10)
+        self.disarm_vehicle()
+
+    def ScriptingSubBindings(self):
+        '''test the Sub scripting bindings, one at a time'''
+        self.context_collect('STATUSTEXT')
+        self.set_parameters({
+            "SCR_ENABLE": 1,
+            "WP_SPD": 0.5,
+        })
+        # the autotest selects a stage with SBT_STAGE; the script reports
+        # "SBT: PASS name" or "SBT: FAIL name info" for the checks it can
+        # make itself while the autotest checks the vehicle's response
+        self.install_script_content_context("sub-bindings-test.lua", """
+local PARAM_TABLE_KEY = 87
+assert(param:add_table(PARAM_TABLE_KEY, "SBT_", 1), "could not add param table")
+assert(param:add_param(PARAM_TABLE_KEY, 1, "STAGE", 0), "could not add STAGE param")
+local SBT_STAGE = Parameter("SBT_STAGE")
+
+local STREAM_S = 12
+
+local stage = 0
+local stage_start_ms = millis()
+local start_pos      -- position NED from the EKF origin when the stage started
+local state = {}     -- state of the current stage
+
+local function vec3(x, y, z)
+    local v = Vector3f()
+    v:x(x)
+    v:y(y)
+    v:z(z)
+    return v
+end
+
+local function report(name, ok, info)
+    if ok then
+        gcs:send_text(6, "SBT: PASS " .. name)
+    else
+        gcs:send_text(3, "SBT: FAIL " .. name .. " " .. tostring(info))
+    end
+end
+
+local function report_once(name, ok, info)
+    if not state[name] then
+        state[name] = true
+        report(name, ok, info)
+    end
+end
+
+-- record a failure from any call in a stage which streams targets
+local function check(ok)
+    if not ok then
+        state.failed = true
+    end
+end
+
+local STAGES = {}
+
+-- every setter refuses outside guided modes
+STAGES[1] = function(_, first)
+    if not first then
+        return
+    end
+    local loc = ahrs:get_location()
+    local zero = Vector3f()
+    local results = {
+        vehicle:set_target_location(loc),
+        vehicle:set_target_pos_NED(start_pos, false, 0, false, 0, false, false),
+        vehicle:set_target_posvel_NED(start_pos, zero),
+        vehicle:set_target_posvelaccel_NED(start_pos, zero, zero, false, 0, false, 0, false),
+        vehicle:set_target_velocity_NED(zero),
+    }
+    for i, result in ipairs(results) do
+        if result then
+            report("setters_false", false, i)
+            return
+        end
+    end
+    report("setters_false", true)
+end
+
+STAGES[2] = function(_, first)
+    if first then
+        state.target = ahrs:get_location()
+        state.target:offset(8, 0)
+        report("target_location", vehicle:set_target_location(state.target))
+    end
+end
+
+STAGES[5] = function(_, first)
+    if not first then
+        return
+    end
+    local target = start_pos + vec3(5, 0, 2)
+    gcs:send_text(6, string.format("SBT: TGT %.2f %.2f %.2f", target:x(), target:y(), target:z()))
+    report("pos_NED", vehicle:set_target_pos_NED(target, true, 90, false, 0, false, false))
+end
+
+STAGES[6] = function(t)
+    local moving = t <= STREAM_S
+    local vel = moving and vec3(0, 0.4, 0) or Vector3f()
+    check(vehicle:set_target_posvel_NED(start_pos + vec3(0, 0.4 * math.min(t, STREAM_S), 0), vel))
+    if not moving then
+        report_once("posvel_NED", not state.failed)
+    end
+end
+
+STAGES[7] = function(t)
+    local moving = t <= STREAM_S
+    local vel = moving and vec3(0.4, 0, 0) or Vector3f()
+    local pos = start_pos + vec3(0.4 * math.min(t, STREAM_S), 0, 0)
+    check(vehicle:set_target_posvelaccel_NED(pos, vel, Vector3f(), true, 0, false, 0, false))
+    if not moving then
+        report_once("posvelaccel_NED", not state.failed)
+    end
+end
+
+STAGES[8] = function(t)
+    local moving = t <= STREAM_S
+    check(vehicle:set_target_velocity_NED(moving and vec3(0, -0.4, 0) or Vector3f()))
+    if not moving then
+        report_once("velocity_NED", not state.failed)
+    end
+end
+
+local function update()
+    local want = math.floor(SBT_STAGE:get())
+    local first = want ~= stage
+    if first then
+        stage = want
+        stage_start_ms = millis()
+        start_pos = ahrs:get_relative_position_NED_origin()
+        state = {}
+        gcs:send_text(6, string.format("SBT: stage %d start", stage))
+    end
+    local run = STAGES[stage]
+    if run ~= nil and start_pos ~= nil then
+        run((millis() - stage_start_ms):tofloat() * 0.001, first)
+    end
+    return update, 50
+end
+
+gcs:send_text(6, "SBT: loaded")
+return update, 1000
+""")
+        self.reboot_sitl()
+        self.wait_statustext("SBT: loaded", check_context=True)
+
+        def stage(number):
+            self.set_parameter("SBT_STAGE", number)
+            self.wait_statustext(f"SBT: stage {number} start", check_context=True)
+
+        def result(name, timeout=30):
+            m = self.wait_statustext(f"SBT: (PASS|FAIL) {name}( |$)", regex=True, check_context=True, timeout=timeout)
+            if "FAIL" in m.text:
+                raise NotAchievedException(m.text)
+
+        self.dive(-10, mode='ALT_HOLD')
+
+        self.start_subtest("Setters return false outside guided modes")
+        stage(1)
+        result("setters_false")
+
+        self.change_mode('GUIDED')
+
+        self.start_subtest("set_target_location")
+        target = self.offset_location_ne(self.get_location(), 8, 0)
+        stage(2)
+        result("target_location")
+        self.wait_location(target, accuracy=1, height_accuracy=1, timeout=60)
+
+        self.start_subtest("set_target_pos_NED")
+        stage(5)
+        result("pos_NED")
+        m = self.wait_statustext("SBT: TGT", check_context=True)
+        target_ned = tuple(float(x) for x in m.text.split()[2:5])
+        self.wait_distance_to_local_position(target_ned, 0, 0.5, timeout=60)
+        self.wait_heading(90, minimum_duration=2)
+
+        self.start_subtest("set_target_posvel_NED")
+        stage(6)
+        self.wait_velocity_ned((None, 0.4, None), timeout=12)
+        result("posvel_NED")
+
+        self.start_subtest("set_target_posvelaccel_NED")
+        stage(7)
+        self.wait_velocity_ned((0.4, None, None), timeout=12)
+        self.wait_heading(0, minimum_duration=1, timeout=10)
+        result("posvelaccel_NED")
+
+        self.start_subtest("set_target_velocity_NED")
+        stage(8)
+        self.wait_velocity_ned((None, -0.4, None), timeout=12)
+        self.wait_heading(0, minimum_duration=2, timeout=10)
+        result("velocity_NED")
+
+        failure = self.statustext_in_collections("SBT: FAIL")
+        if failure is not None:
+            raise NotAchievedException(failure.text)
+
+        self.disarm_vehicle()
+
     def AutoIgnoresGuidedTargets(self):
         '''check guided targets do not change an AUTO mission leg'''
         self.set_parameter("WP_SPD", 0.5)
@@ -2012,6 +2305,8 @@ class AutoTestSub(vehicle_test_suite.TestSuite):
             self.IgnoreGPSDrift,
             self.GuidedPosVelAccel,
             self.GuidedAboveTerrain,
+            self.ScriptingCustomMode,
+            self.ScriptingSubBindings,
             self.AutoIgnoresGuidedTargets,
             self.GuidedAttitudeForwardLatch,
         ])
